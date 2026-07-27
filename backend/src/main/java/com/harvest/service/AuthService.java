@@ -6,16 +6,20 @@ import com.harvest.dto.SignupRequest;
 import com.harvest.dto.UserDto;
 import com.harvest.entity.User;
 import com.harvest.exception.DuplicateResourceException;
+import com.harvest.exception.ResourceNotFoundException;
 import com.harvest.repository.UserRepository;
 import com.harvest.security.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Instant;
 
 @Slf4j
 @Service
@@ -28,56 +32,74 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
 
     @Transactional
-    public AuthResponse signup(SignupRequest request) {
-        if (userRepository.existsByEmail(request.getEmail())) {
-            throw new DuplicateResourceException("Email already registered");
+    public AuthResult signup(SignupRequest request) {
+        String normalizedEmail = normalizeEmail(request.getEmail());
+
+        if (userRepository.existsByEmail(normalizedEmail)) {
+            throw new DuplicateResourceException("An account with this email already exists");
         }
 
         User user = User.builder()
-                .name(request.getName())
-                .email(request.getEmail())
+                .name(request.getName().trim())
+                .email(normalizedEmail)
                 .password(passwordEncoder.encode(request.getPassword()))
                 .build();
 
-        User savedUser = userRepository.save(user);
-        String token = jwtUtil.generateToken(savedUser.getEmail());
+        User savedUser;
+        try {
+            savedUser = userRepository.save(user);
+        } catch (DataIntegrityViolationException e) {
+            // Guards against the race where two signups for the same email are submitted
+            // concurrently and both pass the existsByEmail check above; the DB's unique
+            // constraint on email is the real source of truth.
+            throw new DuplicateResourceException("An account with this email already exists");
+        }
 
+        String token = jwtUtil.generateToken(savedUser.getEmail());
         log.info("New user registered: {}", savedUser.getEmail());
 
-        return AuthResponse.builder()
-                .token(token)
-                .user(mapToDto(savedUser))
+        AuthResponse body = AuthResponse.builder()
+                .user(UserDto.from(savedUser))
                 .message("Account created successfully")
+                .expiresAt(Instant.now().plusMillis(jwtUtil.getExpirationMs()))
                 .build();
+
+        return new AuthResult(token, body);
     }
 
-    public AuthResponse login(LoginRequest request) {
+    public AuthResult login(LoginRequest request) {
+        String normalizedEmail = normalizeEmail(request.getEmail());
+
+        // BadCredentialsException (wrong password) and UsernameNotFoundException (unknown
+        // email, wrapped as BadCredentialsException by default so we don't leak which one
+        // failed) both propagate up and are mapped to 401 by GlobalExceptionHandler.
         Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(
-                        request.getEmail(),
-                        request.getPassword()
-                )
+                new UsernamePasswordAuthenticationToken(normalizedEmail, request.getPassword())
         );
 
-        String token = jwtUtil.generateToken(authentication);
+        User user = userRepository.findByEmail(normalizedEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new RuntimeException("User not found"));
-
+        String token = jwtUtil.generateToken(authentication.getName());
         log.info("User logged in: {}", user.getEmail());
 
-        return AuthResponse.builder()
-                .token(token)
-                .user(mapToDto(user))
+        AuthResponse body = AuthResponse.builder()
+                .user(UserDto.from(user))
                 .message("Login successful")
+                .expiresAt(Instant.now().plusMillis(jwtUtil.getExpirationMs()))
                 .build();
+
+        return new AuthResult(token, body);
     }
 
-    private UserDto mapToDto(User user) {
-        return UserDto.builder()
-                .id(user.getId())
-                .name(user.getName())
-                .email(user.getEmail())
-                .build();
+    private String normalizeEmail(String email) {
+        return email.trim().toLowerCase();
+    }
+
+    /**
+     * Pairs the raw JWT (which the controller puts in an httpOnly cookie) with the
+     * response body that actually gets returned to the client.
+     */
+    public record AuthResult(String token, AuthResponse body) {
     }
 }

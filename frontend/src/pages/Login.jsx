@@ -1,15 +1,23 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { motion } from 'framer-motion'
-import { Leaf, Eye, EyeOff, ArrowRight, AlertCircle } from 'lucide-react'
+import { Leaf, Eye, EyeOff, ArrowRight, AlertCircle, Info } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import { getErrorMessage } from '../services/api'
 
 function Login() {
-  const { login } = useAuth()
+  const { login, sessionMessage, clearSessionMessage } = useAuth()
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const navigate = useNavigate()
+  const location = useLocation()
+
+  // If we got here because a protected route redirected us, or because a
+  // session expired, send the person back where they were headed afterwards.
+  const from = location.state?.from?.pathname || '/'
+  const infoMessage = sessionMessage || location.state?.message
 
   const {
     register,
@@ -22,8 +30,9 @@ function Login() {
     setIsSubmitting(true)
     try {
       await login(data.email, data.password)
+      navigate(from, { replace: true })
     } catch (err) {
-      setError(err.response?.data?.message || 'Invalid email or password')
+      setError(getErrorMessage(err, 'Invalid email or password'))
     } finally {
       setIsSubmitting(false)
     }
@@ -50,6 +59,27 @@ function Login() {
               Log in to your Harvest account
             </p>
           </div>
+
+          {/* Session / redirect info message */}
+          {infoMessage && !error && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="flex items-center gap-2 p-3 bg-sage-50 border border-sage-200 rounded-xl text-sage-700 text-sm mb-6"
+            >
+              <Info className="w-4 h-4 flex-shrink-0" />
+              <span className="flex-1">{infoMessage}</span>
+              {sessionMessage && (
+                <button
+                  type="button"
+                  onClick={clearSessionMessage}
+                  className="text-sage-500 hover:text-sage-700 text-xs font-medium"
+                >
+                  Dismiss
+                </button>
+              )}
+            </motion.div>
+          )}
 
           {/* Error */}
           {error && (

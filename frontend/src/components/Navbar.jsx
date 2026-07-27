@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Menu, X, Leaf, LogOut, User } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
@@ -8,8 +8,14 @@ function Navbar() {
   const [isOpen, setIsOpen] = useState(false)
   const { user, isAuthenticated, logout } = useAuth()
   const location = useLocation()
+  const navigate = useNavigate()
 
   const isActive = (path) => location.pathname === path
+
+  const handleLogout = async () => {
+    await logout()
+    navigate('/')
+  }
 
   const navLinks = [
     { path: '/', label: 'Home' },
@@ -50,12 +56,15 @@ function Navbar() {
           <div className="hidden md:flex items-center gap-3">
             {isAuthenticated ? (
               <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-cream-200 rounded-xl">
+                <Link
+                  to="/profile"
+                  className="flex items-center gap-2 px-3 py-1.5 bg-cream-200 rounded-xl hover:bg-cream-300 transition-colors"
+                >
                   <User className="w-4 h-4 text-sage-600" />
                   <span className="text-sm font-medium text-sage-700">{user?.name}</span>
-                </div>
+                </Link>
                 <button
-                  onClick={logout}
+                  onClick={handleLogout}
                   className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-terracotta-600 hover:text-terracotta-700 hover:bg-terracotta-50 rounded-xl transition-all"
                 >
                   <LogOut className="w-4 h-4" />
@@ -117,12 +126,16 @@ function Navbar() {
               <div className="pt-3 border-t border-cream-200 mt-3">
                 {isAuthenticated ? (
                   <>
-                    <div className="flex items-center gap-2 px-4 py-2 mb-2">
+                    <Link
+                      to="/profile"
+                      onClick={() => setIsOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2 mb-2 rounded-xl hover:bg-cream-200 transition-colors"
+                    >
                       <User className="w-4 h-4 text-sage-600" />
                       <span className="text-sm font-medium text-sage-700">{user?.name}</span>
-                    </div>
+                    </Link>
                     <button
-                      onClick={() => { logout(); setIsOpen(false); }}
+                      onClick={() => { handleLogout(); setIsOpen(false); }}
                       className="flex items-center gap-2 w-full px-4 py-2.5 text-sm font-medium text-terracotta-600 hover:bg-terracotta-50 rounded-xl transition-all"
                     >
                       <LogOut className="w-4 h-4" />

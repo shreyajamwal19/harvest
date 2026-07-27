@@ -1,15 +1,19 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { motion } from 'framer-motion'
 import { Leaf, Eye, EyeOff, ArrowRight, AlertCircle } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import { getErrorMessage } from '../services/api'
 
 function Signup() {
   const { signup } = useAuth()
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const navigate = useNavigate()
+  const location = useLocation()
+  const from = location.state?.from?.pathname || '/'
 
   const {
     register,
@@ -23,8 +27,9 @@ function Signup() {
     setIsSubmitting(true)
     try {
       await signup(data.name, data.email, data.password)
+      navigate(from, { replace: true })
     } catch (err) {
-      setError(err.response?.data?.message || 'Something went wrong. Please try again.')
+      setError(getErrorMessage(err))
     } finally {
       setIsSubmitting(false)
     }
