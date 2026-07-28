@@ -27,7 +27,7 @@ function Signup() {
     setIsSubmitting(true)
     try {
       await signup(data.name, data.email, data.password)
-      navigate(from, { replace: true })
+      navigate('/login', { replace: true })
     } catch (err) {
       setError(getErrorMessage(err))
     } finally {

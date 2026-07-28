@@ -28,7 +28,8 @@ public class AuthController {
     @PostMapping("/signup")
     public ResponseEntity<AuthResponse> signup(@Valid @RequestBody SignupRequest request) {
         AuthService.AuthResult result = authService.signup(request);
-        return withAuthCookie(result, HttpStatus.CREATED);
+        // Don't set auth cookie after signup - user should be redirected to login page
+        return ResponseEntity.status(HttpStatus.CREATED).body(result.body());
     }
 
     @PostMapping("/login")

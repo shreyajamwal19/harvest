@@ -73,8 +73,9 @@ export function AuthProvider({ children }) {
   const signup = useCallback(async (name, email, password) => {
     const response = await api.post('/auth/signup', { name, email, password })
     setSessionMessage('')
-    setUser(response.data.user)
-    scheduleAutoLogout(response.data.expiresAt)
+    // Don't automatically log in after signup - user should be redirected to login page
+    // setUser(response.data.user)
+    // scheduleAutoLogout(response.data.expiresAt)
     return response.data.user
   }, [scheduleAutoLogout])
 
