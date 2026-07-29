@@ -1,5 +1,6 @@
 package com.harvest.exception;
 
+import com.harvest.chef.exception.ChefReasoningException;
 import com.harvest.dto.ErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -124,6 +125,17 @@ public class GlobalExceptionHandler {
             DataIntegrityViolationException ex, HttpServletRequest request) {
         log.warn("Data integrity violation: {}", ex.getMessage());
         return build(HttpStatus.CONFLICT, "Conflict", "This record already exists", request, null);
+    }
+
+    // The Chef Brain's underlying AI call failed or returned something unusable - this is
+    // an upstream/dependency failure, not the caller's fault, so it's a 503, not a 500.
+    @ExceptionHandler(ChefReasoningException.class)
+    public ResponseEntity<ErrorResponse> handleChefReasoningException(
+            ChefReasoningException ex, HttpServletRequest request) {
+        log.error("Chef Brain reasoning failure", ex);
+        return build(HttpStatus.SERVICE_UNAVAILABLE, "Service Unavailable",
+                "The Chef Brain couldn't process that right now. Please try again in a moment.",
+                request, null);
     }
 
     @ExceptionHandler(Exception.class)

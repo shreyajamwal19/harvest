@@ -57,4 +57,12 @@ export function getErrorMessage(error, fallback = 'Something went wrong. Please 
   return fallback
 }
 
+/**
+ * Sends one turn to the Chef Brain. Pass the sessionId returned by a
+ * previous call to continue that conversation, or omit it to start a new one.
+ */
+export function chefChat({ sessionId, message }) {
+  return api.post('/chef/chat', { sessionId, message })
+}
+
 export default api

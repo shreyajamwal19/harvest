@@ -19,6 +19,7 @@ function Navbar() {
 
   const navLinks = [
     { path: '/', label: 'Home' },
+    ...(isAuthenticated ? [{ path: '/chef', label: 'Chef Brain' }] : []),
   ]
 
   return (
