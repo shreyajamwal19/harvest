@@ -1,21 +1,61 @@
 /* eslint-disable react/prop-types -- this project doesn't use PropTypes, see AuthContext.jsx */
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChefHat, Send, AlertCircle, HelpCircle, MessageCircleQuestion } from 'lucide-react'
+import {
+  ChefHat,
+  Send,
+  AlertCircle,
+  HelpCircle,
+  MessageCircleQuestion,
+  Sparkles,
+  ShoppingBasket,
+} from 'lucide-react'
 import { chefChat, getErrorMessage } from '../services/api'
 
-/** Renders a single recipe response as a structured card. */
+const SOURCE_LABELS = {
+  local: 'Harvest recipe',
+  themealdb: 'TheMealDB',
+  generated: 'Chef-generated',
+}
+
+/** Renders a single recipe response as a structured card, including why it was chosen. */
 function RecipeCard({ recipe }) {
   if (!recipe) return null
+  const sourceLabel = SOURCE_LABELS[recipe.source] || recipe.source
+
   return (
     <div className="card mt-2">
-      <h3 className="font-display text-lg font-semibold text-sage-900 mb-1">{recipe.title}</h3>
+      <div className="flex items-start justify-between gap-2 mb-1">
+        <h3 className="font-display text-lg font-semibold text-sage-900">{recipe.title}</h3>
+        {sourceLabel && (
+          <span className="flex-shrink-0 text-[10px] uppercase tracking-wide font-semibold text-sage-500 bg-cream-100 border border-cream-200 rounded-full px-2 py-1">
+            {sourceLabel}
+          </span>
+        )}
+      </div>
+
       {recipe.description && (
-        <p className="text-sm text-sage-600 mb-4">{recipe.description}</p>
+        <p className="text-sm text-sage-600 mb-3">{recipe.description}</p>
       )}
+
+      {recipe.rationale && (
+        <div className="flex items-start gap-2 text-sm text-sage-700 bg-sage-50 border border-sage-100 rounded-lg px-3 py-2 mb-3">
+          <Sparkles className="w-4 h-4 mt-0.5 flex-shrink-0 text-sage-500" />
+          <span>{recipe.rationale}</span>
+        </div>
+      )}
+
+      {recipe.missingIngredients?.length > 0 && (
+        <div className="flex items-start gap-2 text-sm text-terracotta-700 bg-terracotta-50 border border-terracotta-100 rounded-lg px-3 py-2 mb-3">
+          <ShoppingBasket className="w-4 h-4 mt-0.5 flex-shrink-0" />
+          <span>You&apos;ll need to pick up: {recipe.missingIngredients.join(', ')}</span>
+        </div>
+      )}
+
       {recipe.servings && (
         <p className="text-xs font-medium text-sage-500 mb-4">Serves {recipe.servings}</p>
       )}
+
       {recipe.ingredients?.length > 0 && (
         <div className="mb-4">
           <h4 className="text-xs font-semibold uppercase tracking-wide text-sage-500 mb-2">
@@ -31,6 +71,7 @@ function RecipeCard({ recipe }) {
           </ul>
         </div>
       )}
+
       {recipe.steps?.length > 0 && (
         <div className="mb-2">
           <h4 className="text-xs font-semibold uppercase tracking-wide text-sage-500 mb-2">
@@ -48,6 +89,7 @@ function RecipeCard({ recipe }) {
           </ol>
         </div>
       )}
+
       {recipe.notes && (
         <p className="text-xs text-sage-500 italic mt-3 pt-3 border-t border-cream-200">
           {recipe.notes}
@@ -73,6 +115,7 @@ function MessageBubble({ turn }) {
 
   const isClarifying = turn.responseType === 'CLARIFYING_QUESTION'
   const isNonAnswer = turn.responseType === 'HONEST_NON_ANSWER'
+  const isTechnique = turn.responseType === 'TECHNIQUE_ANSWER'
 
   return (
     <div className="flex justify-start">
@@ -83,14 +126,19 @@ function MessageBubble({ turn }) {
               ? 'bg-terracotta-50 text-terracotta-800 border border-terracotta-200'
               : isNonAnswer
                 ? 'bg-cream-200 text-sage-700 border border-cream-300'
-                : 'bg-white text-sage-800 border border-cream-200'
+                : isTechnique
+                  ? 'bg-sage-50 text-sage-800 border border-sage-200'
+                  : 'bg-white text-sage-800 border border-cream-200'
           }`}
         >
           {isClarifying && <MessageCircleQuestion className="w-4 h-4 mt-0.5 flex-shrink-0" />}
           {isNonAnswer && <HelpCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />}
+          {isTechnique && <Sparkles className="w-4 h-4 mt-0.5 flex-shrink-0" />}
           <span>{turn.content}</span>
         </div>
-        {turn.recipe && <RecipeCard recipe={turn.recipe} />}
+        {turn.recipes?.map((recipe, index) => (
+          <RecipeCard key={index} recipe={recipe} />
+        ))}
       </div>
     </div>
   )
@@ -140,7 +188,7 @@ function Chef() {
           role: 'assistant',
           content: data.message,
           responseType: data.responseType,
-          recipe: data.recipe,
+          recipes: data.recipes,
         },
       ])
     } catch (err) {
@@ -174,8 +222,8 @@ function Chef() {
         {turns.length === 0 && (
           <div className="flex-1 flex items-center justify-center text-center px-8">
             <p className="text-sage-400 text-sm">
-              Try something like &ldquo;I have eggs, spinach and rice&rdquo; or &ldquo;I&apos;m
-              not sure what to cook tonight.&rdquo;
+              Try something like &ldquo;I have eggs, spinach and rice&rdquo;, &ldquo;I want
+              authentic ramen&rdquo;, or &ldquo;my sauce split&rdquo;.
             </p>
           </div>
         )}

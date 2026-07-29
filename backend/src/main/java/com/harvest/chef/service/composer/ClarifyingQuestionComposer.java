@@ -5,6 +5,7 @@ import com.harvest.chef.dto.ChefResponse;
 import com.harvest.chef.dto.ChefResponseType;
 import com.harvest.chef.dto.ConversationContext;
 import com.harvest.chef.dto.GoalAssessment;
+import com.harvest.chef.dto.RetrievalPlan;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -24,7 +25,7 @@ public class ClarifyingQuestionComposer implements ResponseComposer {
     private final AnthropicClient anthropicClient;
 
     @Override
-    public ChefResponse compose(ConversationContext context, GoalAssessment assessment) {
+    public ChefResponse compose(ConversationContext context, GoalAssessment assessment, RetrievalPlan plan) {
         String userPrompt = "User's latest message: " + context.getCurrentMessage()
                 + "\nInterpreted goal: " + assessment.getInterpretedGoal()
                 + "\nWhat's missing: " + assessment.getMissingInformation();
@@ -34,7 +35,7 @@ public class ClarifyingQuestionComposer implements ResponseComposer {
         return ChefResponse.builder()
                 .type(ChefResponseType.CLARIFYING_QUESTION)
                 .message(question)
-                .recipe(null)
+                .recipes(null)
                 .build();
     }
 }

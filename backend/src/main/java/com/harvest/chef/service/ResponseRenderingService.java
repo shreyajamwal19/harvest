@@ -13,7 +13,7 @@ public class ResponseRenderingService {
                 .sessionId(sessionId)
                 .responseType(chefResponse.getType())
                 .message(chefResponse.getMessage())
-                .recipe(chefResponse.getRecipe())
+                .recipes(chefResponse.getRecipes())
                 .build();
     }
 }

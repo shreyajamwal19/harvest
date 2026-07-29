@@ -1,15 +1,17 @@
 package com.harvest.chef.service.composer;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.harvest.chef.client.AnthropicClient;
 import com.harvest.chef.dto.ChefResponse;
 import com.harvest.chef.dto.ChefResponseType;
 import com.harvest.chef.dto.ConversationContext;
+import com.harvest.chef.dto.EvaluatedRecipe;
 import com.harvest.chef.dto.GoalAssessment;
+import com.harvest.chef.dto.RecipeCandidate;
 import com.harvest.chef.dto.RecipeResponse;
-import com.harvest.chef.exception.ChefReasoningException;
-import com.harvest.chef.util.JsonExtractionUtil;
+import com.harvest.chef.dto.RetrievalBundle;
+import com.harvest.chef.dto.RetrievalPlan;
+import com.harvest.chef.retrieval.RecipeEvaluationService;
+import com.harvest.chef.retrieval.RecipeGenerationService;
+import com.harvest.chef.retrieval.RetrievalOrchestrator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -18,77 +20,71 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Used only when the Sufficiency Gate has already confirmed SUFFICIENT.
- * Produces one concrete, cookable recipe - no retrieval, no grounding tools
- * yet (those are later phases); Phase 1 reasons directly from the model's
- * own knowledge and the assembled context.
+ * Used only when the Retrieval Orchestrator has classified the request as
+ * RECIPE. Follows the priority chain: retrieve grounded candidates ->
+ * evaluate/rerank them -> fall back to generation (informed by whatever
+ * grounded candidates existed, even weak ones) only when evaluation keeps
+ * nothing. Multiple recipes may come back, each with its own rationale.
  */
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class RecipeComposer implements ResponseComposer {
 
-    private static final String SYSTEM_PROMPT = """
-            You are the Recipe Composition stage inside Harvest's Chef Brain.
-            The Goal Reasoning stage has already determined the user has given enough \
-            information to act on. Your ONLY job is to produce one concrete, cookable recipe \
-            that fits the user's interpreted goal and stated context.
-
-            Do not ask questions. Do not hedge. Produce a real, specific recipe.
-
-            Respond with ONLY a single JSON object, no prose, no markdown fences, matching exactly:
-            {
-              "title": "recipe name",
-              "description": "one or two sentence description, including why it fits what the user has",
-              "servings": integer,
-              "ingredients": ["quantity + ingredient", "..."],
-              "steps": ["step 1", "step 2", "..."],
-              "notes": "short optional tip, or null"
-            }
-            """;
-
-    private final AnthropicClient anthropicClient;
-    private final ObjectMapper objectMapper;
+    private final RetrievalOrchestrator retrievalOrchestrator;
+    private final RecipeEvaluationService recipeEvaluationService;
+    private final RecipeGenerationService recipeGenerationService;
 
     @Override
-    public ChefResponse compose(ConversationContext context, GoalAssessment assessment) {
-        String userPrompt = "User's latest message: " + context.getCurrentMessage()
-                + "\nInterpreted goal: " + assessment.getInterpretedGoal();
+    public ChefResponse compose(ConversationContext context, GoalAssessment assessment, RetrievalPlan plan) {
+        RetrievalBundle bundle = retrievalOrchestrator.retrieve(context, plan);
 
-        String raw = anthropicClient.send(SYSTEM_PROMPT, userPrompt, 900);
-        RecipeResponse recipe = parse(raw);
+        List<EvaluatedRecipe> evaluated =
+                recipeEvaluationService.evaluate(context, assessment, plan, bundle.getRecipeCandidates());
+
+        List<RecipeResponse> recipes;
+        if (!evaluated.isEmpty()) {
+            recipes = evaluated.stream().map(this::toRecipeResponse).toList();
+        } else {
+            // Nothing grounded was a strong enough fit - fall back to generation,
+            // using any raw candidates as adaptation/combination inspiration.
+            List<RecipeCandidate> inspiration = bundle.getRecipeCandidates();
+            recipes = recipeGenerationService.generate(context, assessment, inspiration);
+        }
+
+        String message = buildSummaryMessage(recipes);
 
         return ChefResponse.builder()
                 .type(ChefResponseType.RECIPE)
-                .message(recipe.getDescription())
-                .recipe(recipe)
+                .message(message)
+                .recipes(recipes)
                 .build();
     }
 
-    private RecipeResponse parse(String raw) {
-        String cleaned = JsonExtractionUtil.stripCodeFences(raw);
-        try {
-            JsonNode node = objectMapper.readTree(cleaned);
+    private RecipeResponse toRecipeResponse(EvaluatedRecipe evaluated) {
+        RecipeCandidate candidate = evaluated.getCandidate();
+        return RecipeResponse.builder()
+                .title(candidate.getTitle())
+                .description(candidate.getDescription())
+                .servings(candidate.getServings())
+                .ingredients(candidate.getIngredients())
+                .steps(candidate.getSteps())
+                .notes(null)
+                .rationale(evaluated.getRationale())
+                .missingIngredients(evaluated.getMissingIngredients())
+                .source(candidate.getSource())
+                .build();
+    }
 
-            List<String> ingredients = new ArrayList<>();
-            node.path("ingredients").forEach(item -> ingredients.add(item.asText()));
-
-            List<String> steps = new ArrayList<>();
-            node.path("steps").forEach(item -> steps.add(item.asText()));
-
-            JsonNode servingsNode = node.path("servings");
-
-            return RecipeResponse.builder()
-                    .title(node.path("title").asText(""))
-                    .description(node.path("description").asText(""))
-                    .servings(servingsNode.isMissingNode() || servingsNode.isNull() ? null : servingsNode.asInt())
-                    .ingredients(ingredients)
-                    .steps(steps)
-                    .notes(node.path("notes").isNull() ? null : node.path("notes").asText(null))
-                    .build();
-        } catch (Exception e) {
-            log.error("Failed to parse recipe JSON: {}", raw, e);
-            throw new ChefReasoningException("The AI reasoning stage returned an unexpected recipe format");
+    private String buildSummaryMessage(List<RecipeResponse> recipes) {
+        if (recipes.isEmpty()) {
+            return "I couldn't put together a solid recipe for that.";
         }
+        if (recipes.size() == 1) {
+            return "Here's what I'd cook: " + recipes.get(0).getTitle() + ".";
+        }
+        List<String> titles = new ArrayList<>();
+        recipes.forEach(r -> titles.add(r.getTitle()));
+        return "A few options worth cooking: " + String.join(", ", titles) + ".";
     }
 }

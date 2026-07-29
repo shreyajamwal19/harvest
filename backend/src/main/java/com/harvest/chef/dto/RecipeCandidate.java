@@ -7,21 +7,17 @@ import lombok.NoArgsConstructor;
 
 import java.util.List;
 
+/** Raw output of any RecipeProvider - not yet ranked or filtered. */
 @Getter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class RecipeResponse {
+public class RecipeCandidate {
     private String title;
     private String description;
     private Integer servings;
     private List<String> ingredients;
     private List<String> steps;
-    private String notes;
-    /** Why the Chef Brain selected this recipe specifically - always populated. */
-    private String rationale;
-    /** Ingredients this recipe needs that the user hasn't mentioned having. */
-    private List<String> missingIngredients;
-    /** "local", "themealdb", "generated", etc. */
+    /** e.g. "local", "themealdb" - which provider produced this candidate. */
     private String source;
 }

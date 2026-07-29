@@ -5,6 +5,7 @@ import com.harvest.chef.dto.ChefResponse;
 import com.harvest.chef.dto.ChefResponseType;
 import com.harvest.chef.dto.ConversationContext;
 import com.harvest.chef.dto.GoalAssessment;
+import com.harvest.chef.dto.RetrievalPlan;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -27,7 +28,7 @@ public class HonestNonAnswerComposer implements ResponseComposer {
     private final AnthropicClient anthropicClient;
 
     @Override
-    public ChefResponse compose(ConversationContext context, GoalAssessment assessment) {
+    public ChefResponse compose(ConversationContext context, GoalAssessment assessment, RetrievalPlan plan) {
         String userPrompt = "User's latest message: " + context.getCurrentMessage()
                 + "\nInterpreted goal: " + assessment.getInterpretedGoal();
 
@@ -36,7 +37,7 @@ public class HonestNonAnswerComposer implements ResponseComposer {
         return ChefResponse.builder()
                 .type(ChefResponseType.HONEST_NON_ANSWER)
                 .message(message)
-                .recipe(null)
+                .recipes(null)
                 .build();
     }
 }
