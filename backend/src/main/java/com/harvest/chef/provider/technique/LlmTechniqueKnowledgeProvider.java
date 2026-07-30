@@ -1,8 +1,16 @@
 package com.harvest.chef.provider.technique;
 
 import com.harvest.chef.client.AnthropicClient;
+import com.harvest.chef.exception.ChefReasoningException;
+import com.harvest.chef.knowledge.model.KnowledgeProviderType;
+import com.harvest.chef.knowledge.model.ProviderHealth;
+import com.harvest.chef.knowledge.model.ProviderResult;
+import com.harvest.chef.knowledge.provider.CookingKnowledgeProvider;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+
+import java.time.Instant;
 
 /**
  * Grounds technique/food-science answers in general cooking knowledge via
@@ -12,10 +20,11 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @RequiredArgsConstructor
-public class LlmTechniqueKnowledgeProvider implements TechniqueKnowledgeProvider {
+@Slf4j
+public class LlmTechniqueKnowledgeProvider implements CookingKnowledgeProvider {
 
     private static final String SYSTEM_PROMPT = """
-            You are the Technique Knowledge provider inside Harvest's Chef Brain.
+            You are the Cooking Knowledge provider inside Harvest's Chef Brain.
             Answer cooking-method, food-science, and kitchen-mistake questions directly and
             practically - no recipe, no ingredient list, no follow-up question.
 
@@ -28,8 +37,50 @@ public class LlmTechniqueKnowledgeProvider implements TechniqueKnowledgeProvider
     private final AnthropicClient anthropicClient;
 
     @Override
-    public String answer(String question, String interpretedGoal) {
-        String userPrompt = "User's question: " + question + "\nInterpreted goal: " + interpretedGoal;
-        return anthropicClient.send(SYSTEM_PROMPT, userPrompt, 350).trim();
+    public ProviderResult<String> retrieve(String question, String interpretedGoal) {
+        long start = System.currentTimeMillis();
+        try {
+            String userPrompt = "User's question: " + question + "\nInterpreted goal: " + interpretedGoal;
+            String answer = anthropicClient.send(SYSTEM_PROMPT, userPrompt, 350).trim();
+
+            return ProviderResult.<String>builder()
+                    .data(answer)
+                    .success(true)
+                    .providerName(getName())
+                    .confidence(0.8)
+                    .completeness(1.0)
+                    .latencyMs(System.currentTimeMillis() - start)
+                    .reliability(getReliability())
+                    .retrievedAt(Instant.now())
+                    .build();
+        } catch (ChefReasoningException e) {
+            log.warn("Cooking knowledge provider failed: {}", e.getMessage());
+            return ProviderResult.failure(getName(), e.getMessage(), System.currentTimeMillis() - start);
+        }
+    }
+
+    @Override
+    public KnowledgeProviderType getType() {
+        return KnowledgeProviderType.COOKING_KNOWLEDGE;
+    }
+
+    @Override
+    public String getName() {
+        return "llm-technique";
+    }
+
+    @Override
+    public boolean isAvailable() {
+        return true;
+    }
+
+    @Override
+    public ProviderHealth healthStatus() {
+        return ProviderHealth.UP;
+    }
+
+    @Override
+    public double getReliability() {
+        return 0.85;
     }
 }

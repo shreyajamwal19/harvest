@@ -16,6 +16,7 @@ public class RetrievalPlan {
     private List<String> mentionedIngredients;
     private boolean needsExternalRecipes;
     private boolean needsNutritionGrounding;
+    private boolean needsIngredientIntelligence;
     private String searchQuery;
     private String reasoningNote;
 }

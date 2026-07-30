@@ -3,12 +3,17 @@ package com.harvest.chef.provider.nutrition;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.harvest.chef.client.SimpleHttpJsonClient;
 import com.harvest.chef.dto.NutritionInfo;
+import com.harvest.chef.knowledge.model.KnowledgeProviderType;
+import com.harvest.chef.knowledge.model.ProviderHealth;
+import com.harvest.chef.knowledge.model.ProviderResult;
+import com.harvest.chef.knowledge.provider.NutritionKnowledgeProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -21,23 +26,63 @@ import java.util.Optional;
 @Component
 @RequiredArgsConstructor
 @Slf4j
-public class UsdaNutritionProvider implements NutritionProvider {
+public class UsdaNutritionProvider implements NutritionKnowledgeProvider {
 
     private final SimpleHttpJsonClient httpJsonClient;
     private final NutritionProperties properties;
 
     @Override
-    public List<NutritionInfo> lookup(List<String> ingredientNames) {
-        if (properties.getApiKey() == null || properties.getApiKey().isBlank()) {
+    public ProviderResult<List<NutritionInfo>> retrieve(List<String> ingredientNames) {
+        long start = System.currentTimeMillis();
+
+        if (!isAvailable()) {
             log.info("NUTRITION_API_KEY not configured - skipping nutrition grounding rather than guessing.");
-            return List.of();
+            return ProviderResult.failure(getName(), "Nutrition API key not configured",
+                    System.currentTimeMillis() - start);
         }
 
         List<NutritionInfo> results = new ArrayList<>();
         for (String ingredient : ingredientNames) {
             lookupOne(ingredient).ifPresent(results::add);
         }
-        return results;
+
+        double completeness = ingredientNames.isEmpty() ? 0.0 : (double) results.size() / ingredientNames.size();
+
+        return ProviderResult.<List<NutritionInfo>>builder()
+                .data(results)
+                .success(true)
+                .providerName(getName())
+                .confidence(results.isEmpty() ? 0.0 : 0.9)
+                .completeness(completeness)
+                .latencyMs(System.currentTimeMillis() - start)
+                .reliability(getReliability())
+                .retrievedAt(Instant.now())
+                .build();
+    }
+
+    @Override
+    public KnowledgeProviderType getType() {
+        return KnowledgeProviderType.NUTRITION;
+    }
+
+    @Override
+    public String getName() {
+        return "usda-fdc";
+    }
+
+    @Override
+    public boolean isAvailable() {
+        return properties.getApiKey() != null && !properties.getApiKey().isBlank();
+    }
+
+    @Override
+    public ProviderHealth healthStatus() {
+        return isAvailable() ? ProviderHealth.UP : ProviderHealth.DOWN;
+    }
+
+    @Override
+    public double getReliability() {
+        return 0.9;
     }
 
     private Optional<NutritionInfo> lookupOne(String ingredientName) {

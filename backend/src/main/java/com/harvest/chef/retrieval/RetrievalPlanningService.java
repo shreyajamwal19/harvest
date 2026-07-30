@@ -45,6 +45,9 @@ public class RetrievalPlanningService {
               a named dish, an unusual combination) that a small local recipe set likely won't cover it.
             - needsNutritionGrounding: true only if the user cares about calories, protein, macros,
               or a health-driven constraint (diabetic-safe, high-protein, etc).
+            - needsIngredientIntelligence: true if the request is fundamentally about an ingredient
+              itself - substitutions, pairings, storage, shelf life - rather than a full recipe or
+              a technique/mistake question.
             - searchQuery: a short natural-language query (3-8 words) to search recipe sources with.
 
             Respond with ONLY a single JSON object, no prose, no markdown fences, matching exactly:
@@ -53,6 +56,7 @@ public class RetrievalPlanningService {
               "mentionedIngredients": ["..."],
               "needsExternalRecipes": boolean,
               "needsNutritionGrounding": boolean,
+              "needsIngredientIntelligence": boolean,
               "searchQuery": "short search query",
               "reasoningNote": "one short sentence explaining the plan"
             }
@@ -82,6 +86,7 @@ public class RetrievalPlanningService {
                     .mentionedIngredients(ingredients)
                     .needsExternalRecipes(node.path("needsExternalRecipes").asBoolean(false))
                     .needsNutritionGrounding(node.path("needsNutritionGrounding").asBoolean(false))
+                    .needsIngredientIntelligence(node.path("needsIngredientIntelligence").asBoolean(false))
                     .searchQuery(node.path("searchQuery").asText(""))
                     .reasoningNote(node.path("reasoningNote").asText(""))
                     .build();

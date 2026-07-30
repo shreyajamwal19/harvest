@@ -1,5 +1,6 @@
 package com.harvest.chef.dto;
 
+import com.harvest.chef.knowledge.model.IngredientProfile;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -13,4 +14,5 @@ public class RetrievalBundle {
     private List<String> pantryItems;
     private List<String> userMemoryNotes;
     private List<NutritionInfo> nutritionInfo;
+    private List<IngredientProfile> ingredientProfiles;
 }
