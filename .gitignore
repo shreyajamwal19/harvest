@@ -16,3 +16,5 @@ backend/application-local.properties
 # OS
 .DS_Store
 Thumbs.db
+backend/src/main/resources/RAW_recipes.csv
+backend/src/main/resources/RAW_recipes.csv
