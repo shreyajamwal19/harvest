@@ -3,11 +3,9 @@ package com.harvest.chef.service.composer;
 import com.harvest.chef.dto.ChefResponse;
 import com.harvest.chef.dto.ChefResponseType;
 import com.harvest.chef.dto.ConversationContext;
-import com.harvest.chef.dto.GoalAssessment;
 import com.harvest.chef.dto.RetrievalPlan;
 import com.harvest.chef.knowledge.manager.KnowledgeProviderManager;
 import com.harvest.chef.knowledge.model.IngredientProfile;
-import com.harvest.chef.exception.ChefReasoningException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -17,8 +15,15 @@ import java.util.List;
  * Used when the Retrieval Orchestrator classifies the request as
  * TECHNIQUE, not RECIPE. When the plan flags ingredient intelligence as
  * relevant (e.g. "what can I substitute for buttermilk"), that context is
- * pulled in and folded into the answer rather than answered from the
- * model's own knowledge alone.
+ * pulled in and folded into the answer.
+ *
+ * No cooking-knowledge or ingredient-intelligence provider is currently
+ * registered (their only implementations were LLM-backed and have been
+ * removed) - {@link KnowledgeProviderManager} will honestly return empty/
+ * null rather than any provider fabricating an answer. This composer
+ * reflects that back to the user directly instead of a 503, since "I
+ * don't have a grounded answer for that yet" is itself an honest,
+ * non-fabricated response.
  */
 @Component
 @RequiredArgsConstructor
@@ -27,9 +32,8 @@ public class TechniqueAnswerComposer implements ResponseComposer {
     private final KnowledgeProviderManager knowledgeProviderManager;
 
     @Override
-    public ChefResponse compose(ConversationContext context, GoalAssessment assessment, RetrievalPlan plan) {
+    public ChefResponse compose(ConversationContext context, RetrievalPlan plan) {
         String question = context.getCurrentMessage();
-        String goal = assessment.getInterpretedGoal();
 
         if (plan != null && plan.isNeedsIngredientIntelligence()
                 && plan.getMentionedIngredients() != null && !plan.getMentionedIngredients().isEmpty()) {
@@ -38,9 +42,10 @@ public class TechniqueAnswerComposer implements ResponseComposer {
             question = appendIngredientContext(question, profiles);
         }
 
-        String answer = knowledgeProviderManager.retrieveCookingKnowledge(question, goal);
+        String answer = knowledgeProviderManager.retrieveCookingKnowledge(question, context.getCurrentMessage());
         if (answer == null) {
-            throw new ChefReasoningException("The Chef Brain couldn't produce a cooking knowledge answer right now.");
+            answer = "I don't have a grounded technique answer for that right now - "
+                    + "no cooking-knowledge source has that covered yet.";
         }
 
         return ChefResponse.builder()

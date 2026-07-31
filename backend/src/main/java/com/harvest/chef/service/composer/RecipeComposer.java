@@ -4,7 +4,6 @@ import com.harvest.chef.dto.ChefResponse;
 import com.harvest.chef.dto.ChefResponseType;
 import com.harvest.chef.dto.ConversationContext;
 import com.harvest.chef.dto.EvaluatedRecipe;
-import com.harvest.chef.dto.GoalAssessment;
 import com.harvest.chef.dto.RecipeCandidate;
 import com.harvest.chef.dto.RecipeResponse;
 import com.harvest.chef.dto.RetrievalBundle;
@@ -20,11 +19,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Used only when the Retrieval Orchestrator has classified the request as
- * RECIPE. Follows the priority chain: retrieve grounded candidates ->
- * evaluate/rerank them -> fall back to generation (informed by whatever
- * grounded candidates existed, even weak ones) only when evaluation keeps
- * nothing. Multiple recipes may come back, each with its own rationale.
+ * Used when the Retrieval Orchestrator has classified the request as
+ * RECIPE. Retrieves grounded candidates, ranks them deterministically, and
+ * falls back to an honest "nothing suitable" result (never a fabricated
+ * recipe) when nothing grounded is a fit.
  */
 @Component
 @RequiredArgsConstructor
@@ -36,20 +34,18 @@ public class RecipeComposer implements ResponseComposer {
     private final RecipeGenerationService recipeGenerationService;
 
     @Override
-    public ChefResponse compose(ConversationContext context, GoalAssessment assessment, RetrievalPlan plan) {
+    public ChefResponse compose(ConversationContext context, RetrievalPlan plan) {
         RetrievalBundle bundle = retrievalOrchestrator.retrieve(context, plan);
 
         List<EvaluatedRecipe> evaluated =
-                recipeEvaluationService.evaluate(context, assessment, plan, bundle.getRecipeCandidates());
+                recipeEvaluationService.evaluate(context, plan, bundle.getRecipeCandidates());
 
         List<RecipeResponse> recipes;
         if (!evaluated.isEmpty()) {
             recipes = evaluated.stream().map(this::toRecipeResponse).toList();
         } else {
-            // Nothing grounded was a strong enough fit - fall back to generation,
-            // using any raw candidates as adaptation/combination inspiration.
             List<RecipeCandidate> inspiration = bundle.getRecipeCandidates();
-            recipes = recipeGenerationService.generate(context, assessment, inspiration);
+            recipes = recipeGenerationService.generate(inspiration);
         }
 
         String message = buildSummaryMessage(recipes);
@@ -78,7 +74,7 @@ public class RecipeComposer implements ResponseComposer {
 
     private String buildSummaryMessage(List<RecipeResponse> recipes) {
         if (recipes.isEmpty()) {
-            return "I couldn't put together a solid recipe for that.";
+            return "I couldn't find a suitable recipe for that from what's available right now.";
         }
         if (recipes.size() == 1) {
             return "Here's what I'd cook: " + recipes.get(0).getTitle() + ".";
