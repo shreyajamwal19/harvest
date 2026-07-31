@@ -3,20 +3,19 @@ package com.harvest.chef.service;
 import com.harvest.chef.dto.ChatResponse;
 import com.harvest.chef.dto.ChefResponse;
 import com.harvest.chef.dto.ConversationContext;
-import com.harvest.chef.dto.GoalAssessment;
-import com.harvest.chef.dto.GoalSufficiency;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 /**
- * The Chef Brain's orchestration layer. Coordinates the cognitive loop:
- * Context Assembly -> Goal Reasoning -> Sufficiency Gate -> Composition ->
- * Response Rendering -> Memory Write.
+ * The Chef Brain's orchestration layer. Coordinates the request pipeline:
+ * Context Assembly -> Composition (which runs Retrieval Planning internally
+ * as its first step) -> Response Rendering -> Memory Write.
  *
- * Holds no reasoning or prompt logic itself - each stage is an independent,
- * injectable service, so future phases (retrieval tools, richer memory,
- * more composers) plug in here without touching this coordination logic.
+ * There is no Goal Reasoning or Sufficiency Gate stage - every request
+ * flows straight from Context Assembly into Composition/Retrieval
+ * Planning. Holds no reasoning or prompt logic itself - each stage is an
+ * independent, injectable service.
  */
 @Service
 @RequiredArgsConstructor
@@ -24,8 +23,6 @@ import org.springframework.stereotype.Service;
 public class ChefOrchestrator {
 
     private final ContextAssemblyService contextAssemblyService;
-    private final GoalReasoningService goalReasoningService;
-    private final SufficiencyGateService sufficiencyGateService;
     private final CompositionService compositionService;
     private final ResponseRenderingService responseRenderingService;
     private final MemoryWriteService memoryWriteService;
@@ -34,21 +31,14 @@ public class ChefOrchestrator {
         // 1. Context Assembly
         ConversationContext context = contextAssemblyService.assemble(userId, requestedSessionId, message);
 
-        // 2. Goal Reasoning
-        GoalAssessment assessment = goalReasoningService.assess(context);
+        // 2. Composition (runs Retrieval Planning internally, then dispatches by intent)
+        ChefResponse chefResponse = compositionService.compose(context);
+        log.info("Chef Brain response for session {}: type={}", context.getSessionId(), chefResponse.getType());
 
-        // 3. Sufficiency Gate
-        GoalSufficiency decision = sufficiencyGateService.decide(assessment);
-        log.info("Chef Brain decision for session {}: {} ({})",
-                context.getSessionId(), decision, assessment.getReasoningNote());
-
-        // 5. Composition
-        ChefResponse chefResponse = compositionService.compose(context, assessment, decision);
-
-        // 7. Response Rendering
+        // 3. Response Rendering
         ChatResponse response = responseRenderingService.render(context.getSessionId(), chefResponse);
 
-        // 8. Memory Write
+        // 4. Memory Write
         memoryWriteService.record(context.getSessionId(), message, chefResponse);
 
         return response;

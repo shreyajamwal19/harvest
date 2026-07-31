@@ -1,98 +1,127 @@
 package com.harvest.chef.retrieval;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.harvest.chef.client.AnthropicClient;
 import com.harvest.chef.dto.ConversationContext;
-import com.harvest.chef.dto.GoalAssessment;
 import com.harvest.chef.dto.RequestIntent;
 import com.harvest.chef.dto.RetrievalPlan;
-import com.harvest.chef.exception.ChefReasoningException;
-import com.harvest.chef.util.JsonExtractionUtil;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 /**
- * The Retrieval Orchestrator's planning step. Runs once, only when the
- * Sufficiency Gate has already returned SUFFICIENT. Decides:
- * - is this a recipe request or a technique question
- * - what ingredients/pantry items were mentioned
- * - whether external recipe sources are worth querying
- * - whether nutrition grounding is worth querying
- * Never decides what tools already excluded from scope (shopping, meal
- * planning, multi-day planning) would need - those aren't implemented.
+ * The Retrieval Orchestrator's planning step. Now the pipeline's entry
+ * point right after Context Assembly - there is no upstream Goal
+ * Reasoning stage anymore.
+ *
+ * Deterministic, rule-based implementation - no LLM call, so the backend
+ * runs without any external API key. Intent is classified with keyword
+ * heuristics; ingredients are pulled out with plain delimiter-based
+ * parsing (not a curated ingredient dictionary) so this stays generic
+ * parsing rather than a fixed catalog. Produces the same {@link RetrievalPlan}
+ * contract the rest of the pipeline already expects.
  */
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class RetrievalPlanningService {
 
-    private static final String SYSTEM_PROMPT = """
-            You are the Retrieval Orchestrator's planning stage inside Harvest's Chef Brain.
-            The Goal Reasoning stage has already confirmed there is enough information to act on.
-            Your job is to decide HOW to help, before anything is retrieved or generated.
+    // Small, local keyword sets used only for rule-based classification - not a
+    // separate reasoning framework, just inline heuristics for this one stage.
+    private static final List<String> TECHNIQUE_KEYWORDS = List.of(
+            "why", "how do i fix", "how does", "went wrong", "split", "curdled", "curdle",
+            "dense", "burnt", "burn", "overcooked", "undercooked", "soggy", "tough",
+            "deflated", "sunk", "sank", "rubbery", "grainy", "separated", "lumpy",
+            "raw in the middle", "help my", "fix my"
+    );
 
-            Decide:
-            - intent: "RECIPE" if the user wants something to cook, "TECHNIQUE" if they're asking
-              about a cooking method, a mistake, or food science (e.g. "my sauce split", "why is my
-              bread dense") - these should NEVER be treated as recipe requests.
-            - mentionedIngredients: ingredients or pantry items explicitly mentioned, exactly as named.
-            - needsExternalRecipes: true only if the request is specific enough (a named cuisine,
-              a named dish, an unusual combination) that a small local recipe set likely won't cover it.
-            - needsNutritionGrounding: true only if the user cares about calories, protein, macros,
-              or a health-driven constraint (diabetic-safe, high-protein, etc).
-            - needsIngredientIntelligence: true if the request is fundamentally about an ingredient
-              itself - substitutions, pairings, storage, shelf life - rather than a full recipe or
-              a technique/mistake question.
-            - searchQuery: a short natural-language query (3-8 words) to search recipe sources with.
+    private static final List<String> NUTRITION_KEYWORDS = List.of(
+            "protein", "calorie", "calories", "carb", "carbs", "fat", "diabetic",
+            "macro", "macros", "healthy", "low-carb", "low carb", "keto"
+    );
 
-            Respond with ONLY a single JSON object, no prose, no markdown fences, matching exactly:
-            {
-              "intent": "RECIPE" | "TECHNIQUE",
-              "mentionedIngredients": ["..."],
-              "needsExternalRecipes": boolean,
-              "needsNutritionGrounding": boolean,
-              "needsIngredientIntelligence": boolean,
-              "searchQuery": "short search query",
-              "reasoningNote": "one short sentence explaining the plan"
-            }
-            """;
+    private static final List<String> INGREDIENT_INTELLIGENCE_KEYWORDS = List.of(
+            "substitute", "substitution", "instead of", "swap", "pairs with", "pairing",
+            "store", "storage", "shelf life", "how long does", "keep fresh"
+    );
 
-    private final AnthropicClient anthropicClient;
-    private final ObjectMapper objectMapper;
+    // Common lead-in phrases stripped before splitting a message into ingredient tokens.
+    private static final List<String> LEAD_IN_PHRASES = List.of(
+            "i have", "i've got", "i have got", "i want", "i'd like", "i would like",
+            "using", "with", "make something with", "cook with"
+    );
 
-    public RetrievalPlan plan(ConversationContext context, GoalAssessment assessment) {
-        String userPrompt = "User's latest message: " + context.getCurrentMessage()
-                + "\nInterpreted goal: " + assessment.getInterpretedGoal();
+    private static final Set<String> STOPWORDS = Set.of(
+            "a", "an", "the", "some", "and", "or", "to", "for", "of", "my", "me", "i",
+            "please", "want", "need", "have", "got", "make", "cook", "something", "with"
+    );
 
-        String raw = anthropicClient.send(SYSTEM_PROMPT, userPrompt, 400);
-        return parse(raw);
+    public RetrievalPlan plan(ConversationContext context) {
+        String message = context.getCurrentMessage() == null ? "" : context.getCurrentMessage();
+        String lower = message.toLowerCase(Locale.ROOT);
+
+        boolean isTechnique = TECHNIQUE_KEYWORDS.stream().anyMatch(lower::contains);
+        List<String> ingredients = extractIngredients(lower);
+
+        boolean needsExternalRecipes = ingredients.isEmpty();
+        boolean needsNutritionGrounding = NUTRITION_KEYWORDS.stream().anyMatch(lower::contains);
+        boolean needsIngredientIntelligence = INGREDIENT_INTELLIGENCE_KEYWORDS.stream().anyMatch(lower::contains);
+
+        String searchQuery = ingredients.isEmpty() ? shortenForSearch(message) : String.join(" ", ingredients);
+
+        String reasoningNote = "Rule-based plan: intent=" + (isTechnique ? "TECHNIQUE" : "RECIPE")
+                + ", " + ingredients.size() + " ingredient token(s) parsed from the message.";
+
+        RetrievalPlan plan = RetrievalPlan.builder()
+                .intent(isTechnique ? RequestIntent.TECHNIQUE : RequestIntent.RECIPE)
+                .mentionedIngredients(ingredients)
+                .needsExternalRecipes(needsExternalRecipes)
+                .needsNutritionGrounding(needsNutritionGrounding)
+                .needsIngredientIntelligence(needsIngredientIntelligence)
+                .searchQuery(searchQuery)
+                .reasoningNote(reasoningNote)
+                .build();
+
+        log.info("[retrieval-planning] {}", reasoningNote);
+        return plan;
     }
 
-    private RetrievalPlan parse(String raw) {
-        String cleaned = JsonExtractionUtil.stripCodeFences(raw);
-        try {
-            JsonNode node = objectMapper.readTree(cleaned);
-
-            List<String> ingredients = new ArrayList<>();
-            node.path("mentionedIngredients").forEach(item -> ingredients.add(item.asText()));
-
-            return RetrievalPlan.builder()
-                    .intent(RequestIntent.valueOf(node.path("intent").asText("RECIPE")))
-                    .mentionedIngredients(ingredients)
-                    .needsExternalRecipes(node.path("needsExternalRecipes").asBoolean(false))
-                    .needsNutritionGrounding(node.path("needsNutritionGrounding").asBoolean(false))
-                    .needsIngredientIntelligence(node.path("needsIngredientIntelligence").asBoolean(false))
-                    .searchQuery(node.path("searchQuery").asText(""))
-                    .reasoningNote(node.path("reasoningNote").asText(""))
-                    .build();
-        } catch (Exception e) {
-            log.error("Failed to parse retrieval plan JSON: {}", raw, e);
-            throw new ChefReasoningException("The AI reasoning stage returned an unexpected planning format");
+    /**
+     * Plain delimiter-based parsing: strip common lead-in phrases, split on
+     * commas/"and"/"with", drop stopwords and very short tokens. Deliberately
+     * not validated against any fixed ingredient dictionary - whatever the
+     * user typed as a distinct item is trusted as-is.
+     */
+    private List<String> extractIngredients(String lower) {
+        String cleaned = lower;
+        for (String phrase : LEAD_IN_PHRASES) {
+            cleaned = cleaned.replace(phrase, " ");
         }
+
+        String[] rawTokens = cleaned.split(",| and | with |\\n");
+        Set<String> tokens = new LinkedHashSet<>();
+        for (String raw : rawTokens) {
+            String token = raw.trim().replaceAll("[.!?]+$", "");
+            if (token.isEmpty()) {
+                continue;
+            }
+            List<String> words = Arrays.stream(token.split("\\s+"))
+                    .filter(w -> !STOPWORDS.contains(w))
+                    .toList();
+            String normalized = String.join(" ", words).trim();
+            if (normalized.length() >= 2) {
+                tokens.add(normalized);
+            }
+        }
+        return new ArrayList<>(tokens);
+    }
+
+    private String shortenForSearch(String message) {
+        String[] words = message.trim().split("\\s+");
+        int limit = Math.min(words.length, 8);
+        return String.join(" ", Arrays.copyOfRange(words, 0, limit));
     }
 }
