@@ -27,9 +27,12 @@ public class RetrievalOrchestrator {
     private final KnowledgeProviderManager knowledgeProviderManager;
 
     public RetrievalBundle retrieve(ConversationContext context, RetrievalPlan plan) {
-        String query = plan.getSearchQuery() == null || plan.getSearchQuery().isBlank()
-                ? context.getCurrentMessage()
-                : plan.getSearchQuery();
+        // A blank searchQuery here is a deliberate signal from Retrieval Planning
+        // (no ingredient or category could be extracted), not a bug to paper
+        // over - LocalRecipeProvider treats it as an honest catalog browse
+        // rather than a literal-text search that would almost certainly match
+        // nothing across the imported dataset.
+        String query = plan.getSearchQuery() == null ? "" : plan.getSearchQuery();
 
         List<RecipeCandidate> recipeCandidates =
                 knowledgeProviderManager.retrieveRecipes(query, plan.isNeedsExternalRecipes());

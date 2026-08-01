@@ -19,4 +19,13 @@ public class RetrievalPlan {
     private boolean needsIngredientIntelligence;
     private String searchQuery;
     private String reasoningNote;
+    /**
+     * True when the current message is asking to continue a prior recipe
+     * list ("more", "anything else", "another one", ...) rather than
+     * starting a new search. When true, {@link #mentionedIngredients} and
+     * {@link #searchQuery} may be reused from the session's last plan
+     * instead of being freshly derived from this (often content-free)
+     * message.
+     */
+    private boolean continuation;
 }

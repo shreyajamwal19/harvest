@@ -12,15 +12,20 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Stage 1 - Context Assembly.
  *
  * Pure bookkeeping: resolves or creates the conversation session and pulls
- * recent turns for short-term memory. No reasoning, no LLM call - this stage
- * only assembles facts for the stages that follow.
+ * recent turns for short-term memory, plus the session's last retrieval
+ * state (search query, mentioned ingredients, already-shown recipe
+ * titles) so a later "more" turn can continue it. No reasoning, no LLM
+ * call - this stage only assembles facts for the stages that follow.
  */
 @Service
 @RequiredArgsConstructor
@@ -39,6 +44,9 @@ public class ContextAssemblyService {
                 .userId(userId)
                 .currentMessage(currentMessage)
                 .recentTurns(recentTurns)
+                .lastSearchQuery(session.getLastSearchQuery())
+                .lastMentionedIngredients(splitCsv(session.getLastMentionedIngredients()))
+                .shownRecipeTitles(splitPipe(session.getShownRecipeTitles()))
                 .build();
     }
 
@@ -64,5 +72,25 @@ public class ContextAssemblyService {
         }
         Collections.reverse(turns); // chronological order for the reasoning stages
         return turns;
+    }
+
+    private List<String> splitCsv(String csv) {
+        if (csv == null || csv.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(csv.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
+    }
+
+    private Set<String> splitPipe(String pipeSeparated) {
+        if (pipeSeparated == null || pipeSeparated.isBlank()) {
+            return Set.of();
+        }
+        return new LinkedHashSet<>(Arrays.stream(pipeSeparated.split("\\|"))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList());
     }
 }

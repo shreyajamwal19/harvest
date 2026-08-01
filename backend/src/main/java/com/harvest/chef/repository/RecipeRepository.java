@@ -9,13 +9,15 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface RecipeRepository extends JpaRepository<Recipe, Long> {
+public interface RecipeRepository extends JpaRepository<Recipe, Long>, RecipeRepositoryCustom {
 
     /**
-     * Basic text-overlap search across title, description, cuisine, and
-     * ingredient names. Not semantic retrieval - that's a later phase's
-     * vector-store upgrade per the frozen architecture. Real and functional
-     * as a first knowledge provider, not a placeholder.
+     * Legacy single-phrase search, kept for compatibility. Superseded by
+     * {@link RecipeRepositoryCustom#searchByIngredientTokens} for actual
+     * recipe retrieval: this treats the whole term as one literal
+     * substring, which breaks for anything but a single-word query (e.g.
+     * "eggs cheese" would never match an ingredient line, since no
+     * ingredient line literally contains that two-word phrase).
      */
     @Query("""
             SELECT DISTINCT r FROM Recipe r LEFT JOIN r.ingredients i

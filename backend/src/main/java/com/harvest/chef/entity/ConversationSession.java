@@ -37,6 +37,18 @@ public class ConversationSession {
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
+    /** The search query behind the most recent recipe request in this session. */
+    @Column(name = "last_search_query", columnDefinition = "TEXT")
+    private String lastSearchQuery;
+
+    /** Comma-separated ingredients behind the most recent recipe request in this session. */
+    @Column(name = "last_mentioned_ingredients", columnDefinition = "TEXT")
+    private String lastMentionedIngredients;
+
+    /** Pipe-separated, lowercased titles already shown this session (bounded, most-recent-kept). */
+    @Column(name = "shown_recipe_titles", columnDefinition = "TEXT")
+    private String shownRecipeTitles;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
