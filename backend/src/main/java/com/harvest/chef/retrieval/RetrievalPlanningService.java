@@ -132,7 +132,8 @@ public class RetrievalPlanningService {
         }
 
         boolean isTechnique = TECHNIQUE_KEYWORDS.stream().anyMatch(lower::contains);
-        List<String> ingredients = extractIngredients(lower);
+        Set<String> synonymResolved = new LinkedHashSet<>();
+        List<String> ingredients = extractIngredientsWithSynonymTracking(lower, synonymResolved);
 
         boolean needsExternalRecipes = ingredients.isEmpty();
         boolean needsNutritionGrounding = NUTRITION_KEYWORDS.stream().anyMatch(lower::contains);
@@ -152,6 +153,7 @@ public class RetrievalPlanningService {
                 .searchQuery(searchQuery)
                 .reasoningNote(reasoningNote)
                 .continuation(false)
+                .synonymResolvedIngredients(new ArrayList<>(synonymResolved))
                 .build();
 
         log.info("[retrieval-planning] {}", plan.getReasoningNote());
@@ -183,6 +185,7 @@ public class RetrievalPlanningService {
                     .reasoningNote("Continuation phrase with no prior search in this session - "
                             + "falling back to a broad browse.")
                     .continuation(false)
+                    .synonymResolvedIngredients(List.of())
                     .build();
         }
 
@@ -197,6 +200,7 @@ public class RetrievalPlanningService {
                 .reasoningNote("Continuation request - reusing the previous search "
                         + "(\"" + lastQuery + "\") and excluding already-shown recipes.")
                 .continuation(true)
+                .synonymResolvedIngredients(List.of())
                 .build();
     }
 
@@ -259,7 +263,12 @@ public class RetrievalPlanningService {
      * beyond that - whatever distinct word survives filtering is trusted
      * as-is, so uncommon (but real) ingredients still pass through.
      */
-    private List<String> extractIngredients(String lower) {
+    /**
+     * @param synonymResolvedOut if non-null, populated with the subset of the
+     *                           returned tokens that came from synonym
+     *                           resolution rather than being typed exactly.
+     */
+    private List<String> extractIngredientsWithSynonymTracking(String lower, Set<String> synonymResolvedOut) {
         String cleaned = lower;
         for (String phrase : LEAD_IN_PHRASES) {
             cleaned = cleaned.replace(phrase, " ");
@@ -286,6 +295,9 @@ public class RetrievalPlanningService {
                 continue;
             }
             tokens.add(resolved);
+            if (synonymResolvedOut != null && !resolved.equals(corrected)) {
+                synonymResolvedOut.add(resolved);
+            }
         }
         return new ArrayList<>(tokens);
     }

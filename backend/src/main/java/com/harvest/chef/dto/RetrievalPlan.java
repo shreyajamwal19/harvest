@@ -28,4 +28,13 @@ public class RetrievalPlan {
      * message.
      */
     private boolean continuation;
+    /**
+     * Subset of {@link #mentionedIngredients} that reached their final form
+     * via synonym resolution (e.g. "capsicum" -> "bell pepper") rather than
+     * being typed exactly as-is. Used by recipe scoring to weight literal
+     * matches slightly higher than synonym-derived ones. Empty on
+     * continuation plans, since that distinction isn't persisted across
+     * turns.
+     */
+    private List<String> synonymResolvedIngredients;
 }
