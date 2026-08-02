@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -78,18 +79,56 @@ public class RetrievalPlanningService {
             "that", "this", "from", "today", "tonight", "now", "more", "options",
             "option", "recipe", "recipes", "ingredient", "ingredients", "hungry", "starving",
             "nooo", "no", "yes", "ok", "okay", "else", "anything", "different",
-            "other", "others", "another", "next", "help"
+            "other", "others", "another", "next", "help",
+            // Preference/category/occasion words - real search signal, but not
+            // ingredients. Captured separately via detectPreferenceTags() so
+            // "healthy recipes" is understood as a dietary preference rather
+            // than treating the literal word "healthy" as something to match
+            // against ingredient lines.
+            "healthy", "dinner", "lunch", "breakfast", "brunch", "dessert", "snack",
+            "cheap", "budget", "inexpensive", "affordable", "quick", "fast", "easy",
+            "simple", "beginner", "spicy", "vegetarian", "vegan", "protein", "carb",
+            "carbs", "comfort", "comforting", "family", "food", "foods", "meal", "meals", "high"
     );
 
-    // Recognized meal/mood/style category words - kept OUT of the stopword list
-    // deliberately, since these carry real search signal for conversational
-    // requests that have no explicit ingredient ("quick breakfast", "something
-    // spicy", "give me healthy recipes").
-    private static final Set<String> CATEGORY_WORDS = Set.of(
-            "breakfast", "lunch", "dinner", "brunch", "snack", "dessert", "appetizer",
-            "healthy", "quick", "easy", "spicy", "sweet", "savory", "vegetarian", "vegan",
-            "gluten", "keto", "italian", "mexican", "indian", "chinese", "thai"
+    // Intent/preference signals for generic and conversational requests
+    // ("need dinner", "I'm hungry", "healthy recipes", "quick meal", "cheap
+    // meals", "date night", ...). Each tag maps to the phrases that trigger
+    // it; multi-word phrases are checked directly against the raw message
+    // rather than the per-word ingredient pipeline, since they're intent
+    // signals, not ingredients. Consumed by RecipeScoringEngine to align
+    // rankings with what the user actually meant, not just literal keyword
+    // presence in a title.
+    private static final Map<String, Set<String>> PREFERENCE_KEYWORDS = Map.ofEntries(
+            Map.entry("general_meal", Set.of("hungry", "starving", "what should i eat", "what can i eat", "feed me")),
+            Map.entry("breakfast", Set.of("breakfast", "brunch")),
+            Map.entry("lunch", Set.of("lunch")),
+            Map.entry("dinner", Set.of("dinner", "supper")),
+            Map.entry("dessert", Set.of("dessert", "sweet tooth")),
+            Map.entry("snack", Set.of("snack", "late night snack", "late-night snack")),
+            Map.entry("healthy", Set.of("healthy", "health conscious", "nutritious")),
+            Map.entry("high_protein", Set.of("high protein", "high-protein", "protein packed", "protein-packed")),
+            Map.entry("vegetarian", Set.of("vegetarian")),
+            Map.entry("vegan", Set.of("vegan")),
+            Map.entry("low_carb", Set.of("low carb", "low-carb", "keto")),
+            Map.entry("cheap", Set.of("cheap", "budget", "inexpensive", "affordable")),
+            Map.entry("quick", Set.of("quick", "in a hurry", "in a rush")),
+            Map.entry("easy", Set.of("easy", "simple", "beginner")),
+            Map.entry("comfort_food", Set.of("comfort food", "comforting")),
+            Map.entry("family", Set.of("family dinner", "family meal", "family friendly", "family-friendly")),
+            Map.entry("date_night", Set.of("date night")),
+            Map.entry("spicy", Set.of("spicy"))
     );
+
+    private Set<String> detectPreferenceTags(String lower) {
+        Set<String> tags = new LinkedHashSet<>();
+        for (Map.Entry<String, Set<String>> entry : PREFERENCE_KEYWORDS.entrySet()) {
+            if (entry.getValue().stream().anyMatch(lower::contains)) {
+                tags.add(entry.getKey());
+            }
+        }
+        return tags;
+    }
 
     // Regional/synonym ingredient names mapped to the word the imported
     // Food.com dataset's ingredient lines are far more likely to actually
@@ -134,15 +173,17 @@ public class RetrievalPlanningService {
         boolean isTechnique = TECHNIQUE_KEYWORDS.stream().anyMatch(lower::contains);
         Set<String> synonymResolved = new LinkedHashSet<>();
         List<String> ingredients = extractIngredientsWithSynonymTracking(lower, synonymResolved);
+        Set<String> preferenceTags = detectPreferenceTags(lower);
 
         boolean needsExternalRecipes = ingredients.isEmpty();
         boolean needsNutritionGrounding = NUTRITION_KEYWORDS.stream().anyMatch(lower::contains);
         boolean needsIngredientIntelligence = INGREDIENT_INTELLIGENCE_KEYWORDS.stream().anyMatch(lower::contains);
 
-        String searchQuery = buildSearchQuery(ingredients, lower);
+        String searchQuery = buildSearchQuery(ingredients, preferenceTags);
 
         String reasoningNote = "Rule-based plan: intent=" + (isTechnique ? "TECHNIQUE" : "RECIPE")
-                + ", " + ingredients.size() + " ingredient token(s) parsed from the message.";
+                + ", " + ingredients.size() + " ingredient token(s), " + preferenceTags.size()
+                + " preference tag(s) parsed from the message.";
 
         RetrievalPlan plan = RetrievalPlan.builder()
                 .intent(isTechnique ? RequestIntent.TECHNIQUE : RequestIntent.RECIPE)
@@ -154,6 +195,7 @@ public class RetrievalPlanningService {
                 .reasoningNote(reasoningNote)
                 .continuation(false)
                 .synonymResolvedIngredients(new ArrayList<>(synonymResolved))
+                .preferenceTags(preferenceTags)
                 .build();
 
         log.info("[retrieval-planning] {}", plan.getReasoningNote());
@@ -186,6 +228,7 @@ public class RetrievalPlanningService {
                             + "falling back to a broad browse.")
                     .continuation(false)
                     .synonymResolvedIngredients(List.of())
+                    .preferenceTags(Set.of())
                     .build();
         }
 
@@ -201,18 +244,27 @@ public class RetrievalPlanningService {
                         + "(\"" + lastQuery + "\") and excluding already-shown recipes.")
                 .continuation(true)
                 .synonymResolvedIngredients(List.of())
+                .preferenceTags(Set.of())
                 .build();
     }
 
-    private String buildSearchQuery(List<String> ingredients, String lower) {
+    private String buildSearchQuery(List<String> ingredients, Set<String> preferenceTags) {
         if (!ingredients.isEmpty()) {
             return String.join(" ", ingredients);
         }
-        List<String> categoryTokens = CATEGORY_WORDS.stream().filter(lower::contains).toList();
-        if (!categoryTokens.isEmpty()) {
-            return String.join(" ", categoryTokens);
+        // "general_meal" (from "I'm hungry", "starving", ...) is a scoring
+        // signal, not a literal searchable term - including it here would have
+        // the local provider search for the words "general meal", which
+        // appear in almost no real recipe and would defeat the honest-browse
+        // fallback this method exists to provide.
+        List<String> searchableTags = preferenceTags.stream()
+                .filter(tag -> !tag.equals("general_meal"))
+                .map(tag -> tag.replace('_', ' '))
+                .toList();
+        if (!searchableTags.isEmpty()) {
+            return String.join(" ", searchableTags);
         }
-        // No ingredient and no recognizable category signal - deliberately
+        // No ingredient and no recognizable preference signal - deliberately
         // return blank rather than a near-meaningless literal phrase like
         // "i'm hungry"; the local provider treats a blank query as an honest
         // browse of the catalog instead of a search that would match nothing.
@@ -262,8 +314,7 @@ public class RetrievalPlanningService {
      * Deliberately not validated against a fixed ingredient dictionary
      * beyond that - whatever distinct word survives filtering is trusted
      * as-is, so uncommon (but real) ingredients still pass through.
-     */
-    /**
+     *
      * @param synonymResolvedOut if non-null, populated with the subset of the
      *                           returned tokens that came from synonym
      *                           resolution rather than being typed exactly.

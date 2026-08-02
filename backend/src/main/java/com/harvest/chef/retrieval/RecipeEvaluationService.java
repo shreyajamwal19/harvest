@@ -22,8 +22,9 @@ import java.util.Set;
  * isn't five near-identical recipes back to back.
  *
  * All the actual scoring math (ingredient overlap, pantry utilization,
- * primary-ingredient boost, title relevance, exact-vs-synonym weighting,
- * multi-ingredient coverage, completeness, reliability) lives in
+ * tiered ingredient importance, title relevance, exact-vs-synonym
+ * weighting, multi-ingredient coverage, intent/dietary/budget/occasion
+ * alignment, completeness, popularity heuristics, reliability) lives in
  * {@link RecipeScoringEngine} - kept separate so each ranking signal is
  * independently readable/extensible rather than one large method here.
  */
@@ -53,8 +54,6 @@ public class RecipeEvaluationService {
         }
 
         List<String> mentioned = plan.getMentionedIngredients() == null ? List.of() : plan.getMentionedIngredients();
-        List<String> synonymResolved = plan.getSynonymResolvedIngredients() == null
-                ? List.of() : plan.getSynonymResolvedIngredients();
         Set<String> excluded = excludedTitles == null ? Set.of() : excludedTitles;
 
         List<RecipeScore> scored = new ArrayList<>();
@@ -65,7 +64,7 @@ public class RecipeEvaluationService {
             if (excluded.contains(normalizeTitle(candidate.getTitle()))) {
                 continue;
             }
-            scored.add(scoringEngine.score(candidate, mentioned, synonymResolved));
+            scored.add(scoringEngine.score(candidate, plan));
         }
 
         scored.sort(Comparator

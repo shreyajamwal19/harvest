@@ -1,6 +1,10 @@
 package com.harvest.chef.retrieval;
 
 import com.harvest.chef.dto.RecipeCandidate;
+import com.harvest.chef.dto.RetrievalPlan;
+import com.harvest.chef.retrieval.RecipeCategoryClassifier.Category;
+import com.harvest.chef.util.TypoCorrectionUtil;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -9,56 +13,63 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * Phase 4B - multi-factor recipe scoring, ranking, and result diversification.
+ * Phase 4B/4C - multi-factor recipe scoring, ranking, and result
+ * diversification, tuned to feel like an experienced chef's
+ * recommendations rather than a keyword search.
  *
- * Deliberately split out of {@link RecipeEvaluationService} (which now just
- * orchestrates: filter -> score -> sort -> diversify -> shape the response)
- * so each ranking signal is its own small, independently testable method,
- * per the "keep scoring modular" requirement. Every method here is a pure
- * function of its inputs - no randomness, so identical inputs always
- * produce identical scores and ordering.
+ * Deliberately split out of {@link RecipeEvaluationService} (which just
+ * orchestrates: filter -> score -> sort -> diversify -> shape the
+ * response) so each ranking signal is its own small, independently
+ * testable method. Every method here is a pure function of its inputs -
+ * no randomness, so identical inputs always produce identical scores and
+ * ordering.
  *
- * Signals, roughly in the order a chef would reason about them:
- * 1. Ingredient match       - how many mentioned ingredients this recipe uses
- * 2. Pantry utilization     - how little shopping the recipe would require
- * 3. Missing-ingredient penalty
- * 4. Primary ingredient boost - is the searched ingredient central to the
- *    dish (in the title, or among the first few ingredients listed), not
- *    just incidentally present ("eggs" should favor an omelette over a
- *    cake that happens to use one egg)
- * 5. Title relevance        - fraction of mentioned ingredients that show
- *    up as whole words in the title
- * 6. Exact-match boost      - literal matches score slightly higher than
- *    synonym-derived ones (capsicum -> bell pepper still counts, just not
- *    quite as strongly as typing "bell pepper" directly)
- * 7. Multi-ingredient coverage bonus - matching several requested
- *    ingredients outranks matching only one, beyond what the plain overlap
- *    fraction already implies
- * 8. Completeness            - has a real description/servings/steps
- * 9. Source reliability
+ * Signal groups:
+ * - Ingredient-driven (only meaningful when the request actually
+ *   mentioned ingredients): match fraction, pantry utilization, missing
+ *   penalty, tiered ingredient importance (primary/secondary/minor/
+ *   garnish - see {@link #ingredientImportanceScore}), title relevance,
+ *   exact-vs-synonym weighting, multi-ingredient coverage bonus.
+ * - Intent-driven (meaningful even for ingredient-free, conversational
+ *   requests like "need dinner" or "healthy recipes" -
+ *   {@link RetrievalPlan#getPreferenceTags()}): meal-type fit, dietary
+ *   fit, budget fit, occasion fit - see {@link #intentAlignmentScore}.
+ * - Global: recipe completeness, a popularity heuristic derived from
+ *   metadata (no fabricated rating/prep-time - the dataset doesn't carry
+ *   one), and source reliability.
  *
- * Duplicate/diversity handling happens afterwards, once every candidate has
- * a score: {@link #selectDiverseTopResults} walks the score-sorted list and
- * skips near-duplicate titles so a results page isn't five omelette
- * variants back to back, backfilling from the skipped set only if there
- * aren't enough distinct candidates to fill the page.
+ * Duplicate/diversity handling happens afterwards, once every candidate
+ * has a score: {@link #selectDiverseTopResults} walks the score-sorted
+ * list and skips near-duplicate titles (now also considering inferred
+ * category) so a results page isn't five omelette variants back to back.
  */
 @Component
+@RequiredArgsConstructor
 public class RecipeScoringEngine {
 
-    private static final double WEIGHT_INGREDIENT_MATCH = 0.25;
-    private static final double WEIGHT_PANTRY_UTILIZATION = 0.15;
-    private static final double WEIGHT_MISSING_PENALTY = 0.10;
-    private static final double WEIGHT_PRIMARY_INGREDIENT = 0.20;
-    private static final double WEIGHT_TITLE_RELEVANCE = 0.10;
-    private static final double WEIGHT_EXACT_MATCH = 0.05;
+    // Ingredient-driven signal weights.
+    private static final double WEIGHT_INGREDIENT_MATCH = 0.18;
+    private static final double WEIGHT_PANTRY_UTILIZATION = 0.10;
+    private static final double WEIGHT_MISSING_PENALTY = 0.08;
+    private static final double WEIGHT_INGREDIENT_IMPORTANCE = 0.20;
+    private static final double WEIGHT_TITLE_RELEVANCE = 0.08;
+    private static final double WEIGHT_EXACT_MATCH = 0.04;
     private static final double WEIGHT_COVERAGE_BONUS = 0.05;
-    private static final double WEIGHT_COMPLETENESS = 0.05;
-    private static final double WEIGHT_SOURCE = 0.05;
+
+    // Intent + global signal weights - these apply regardless of whether the
+    // request mentioned any ingredient, so a pure "need dinner" still ranks
+    // sensibly.
+    private static final double WEIGHT_INTENT_ALIGNMENT = 0.15;
+    private static final double WEIGHT_POPULARITY = 0.08;
+    private static final double WEIGHT_SOURCE = 0.04;
+
+    private static final double INGREDIENT_SIGNAL_BUDGET = WEIGHT_INGREDIENT_MATCH + WEIGHT_PANTRY_UTILIZATION
+            + WEIGHT_INGREDIENT_IMPORTANCE + WEIGHT_TITLE_RELEVANCE + WEIGHT_EXACT_MATCH + WEIGHT_COVERAGE_BONUS;
 
     // Mirrors the reliability values the providers themselves already declare
     // via KnowledgeProvider.getReliability() - kept in sync, not reinvented.
@@ -82,60 +93,110 @@ public class RecipeScoringEngine {
 
     private static final int PRIMARY_INGREDIENT_WINDOW = 3;
 
+    // ---------------------------------------------------------------- intent keyword sets
+
+    private static final Set<String> GARNISH_INDICATORS = Set.of(
+            "garnish", "to serve", "for serving", "optional", "for topping",
+            "to garnish", "for garnish", "sprinkle of", "pinch of", "dash of", "to taste"
+    );
+
+    private static final Set<String> VEGETABLE_KEYWORDS = Set.of(
+            "spinach", "broccoli", "carrot", "zucchini", "kale", "lettuce", "tomato", "cucumber",
+            "pepper", "cabbage", "cauliflower", "asparagus", "greens", "vegetable", "onion",
+            "mushroom", "peas", "squash"
+    );
+    private static final Set<String> LEAN_PROTEIN_KEYWORDS = Set.of(
+            "chicken breast", "turkey", "tofu", "fish", "salmon", "tuna", "egg", "beans",
+            "lentils", "chickpea", "greek yogurt", "quinoa"
+    );
+    private static final Set<String> MEAT_FISH_KEYWORDS = Set.of(
+            "chicken", "beef", "pork", "bacon", "sausage", "ham", "fish", "shrimp", "turkey",
+            "lamb", "salmon", "tuna", "meat", "gelatin"
+    );
+    private static final Set<String> ANIMAL_PRODUCT_KEYWORDS = Set.of(
+            "milk", "cheese", "butter", "cream", "egg", "yogurt", "honey"
+    );
+    private static final Set<String> HIGH_CARB_KEYWORDS = Set.of(
+            "rice", "pasta", "bread", "sugar", "flour", "potato", "noodle", "tortilla"
+    );
+    private static final Set<String> PROTEIN_KEYWORDS = Set.of(
+            "chicken", "beef", "egg", "tofu", "beans", "lentil", "fish", "turkey", "pork",
+            "shrimp", "quinoa", "greek yogurt", "protein", "salmon", "tuna"
+    );
+    private static final Set<String> SPICY_KEYWORDS = Set.of(
+            "chili", "chilli", "cayenne", "jalapeno", "jalapeño", "hot sauce", "sriracha",
+            "habanero", "spicy", "curry", "szechuan", "pepper flakes", "hot pepper"
+    );
+
+    private final RecipeCategoryClassifier categoryClassifier;
+
     /** Full scoring breakdown for one candidate against one request. */
     public record RecipeScore(RecipeCandidate candidate, double total, int matchedCount,
                                List<String> missingIngredients, List<String> explanations) {
     }
 
-    /**
-     * Scores a single candidate. Each factor is computed by its own method
-     * and combined with a fixed weight - see the class-level signal list.
-     */
-    public RecipeScore score(RecipeCandidate candidate, List<String> mentioned, List<String> synonymResolved) {
+    private enum ImportanceTier {
+        PRIMARY(1.0), SECONDARY(0.6), MINOR(0.3), GARNISH(0.1), ABSENT(0.0);
+
+        final double weight;
+
+        ImportanceTier(double weight) {
+            this.weight = weight;
+        }
+    }
+
+    /** Scores a single candidate against the full retrieval plan (ingredients + intent). */
+    public RecipeScore score(RecipeCandidate candidate, RetrievalPlan plan) {
+        List<String> mentioned = plan.getMentionedIngredients() == null ? List.of() : plan.getMentionedIngredients();
+        Set<String> synonymResolved = plan.getSynonymResolvedIngredients() == null
+                ? Set.of() : new HashSet<>(plan.getSynonymResolvedIngredients());
+        Set<String> preferenceTags = plan.getPreferenceTags() == null ? Set.of() : plan.getPreferenceTags();
         List<String> ingredients = candidate.getIngredients() == null ? List.of() : candidate.getIngredients();
-        Set<String> synonyms = synonymResolved == null ? Set.of() : new HashSet<>(synonymResolved);
 
         int matchedCount = matchedIngredientCount(ingredients, mentioned);
         List<String> missing = missingIngredients(ingredients, mentioned);
+        Set<Category> categories = categoryClassifier.classify(candidate);
+        String combinedText = combinedLowerText(candidate);
 
-        double ingredientMatch = ingredientMatchScore(mentioned, matchedCount);
-        double pantryUtilization = pantryUtilizationScore(ingredients, matchedCount);
-        double missingPenalty = missingPenaltyScore(ingredients, missing.size());
-        double primaryIngredient = primaryIngredientScore(candidate, ingredients, mentioned);
-        double titleRelevance = titleRelevanceScore(candidate, mentioned);
-        double exactMatch = exactMatchScore(mentioned, synonyms, ingredients);
-        double coverageBonus = coverageBonusScore(mentioned, matchedCount);
-        double completeness = completenessScore(candidate);
+        double importance = ingredientImportanceScore(candidate, ingredients, mentioned);
+        double intentAlignment = intentAlignmentScore(preferenceTags, categories, combinedText, candidate);
+        double popularity = popularityHeuristicScore(candidate);
         double reliability = sourceReliabilityScore(candidate);
 
-        double total;
-        if (mentioned.isEmpty()) {
-            // No ingredient signal (a category/browse request) - fall back to
-            // completeness + reliability, using the weight the ingredient-driven
-            // signals would otherwise have claimed so scores stay comparable.
-            double remainingWeight = WEIGHT_INGREDIENT_MATCH + WEIGHT_PANTRY_UTILIZATION
-                    + WEIGHT_MISSING_PENALTY + WEIGHT_PRIMARY_INGREDIENT + WEIGHT_TITLE_RELEVANCE
-                    + WEIGHT_EXACT_MATCH + WEIGHT_COVERAGE_BONUS + WEIGHT_SOURCE;
-            total = WEIGHT_COMPLETENESS * completeness + remainingWeight * reliability;
-        } else {
-            total = WEIGHT_INGREDIENT_MATCH * ingredientMatch
+        double total = WEIGHT_INTENT_ALIGNMENT * intentAlignment
+                + WEIGHT_POPULARITY * popularity
+                + WEIGHT_SOURCE * reliability;
+
+        if (!mentioned.isEmpty()) {
+            double ingredientMatch = ingredientMatchScore(mentioned, matchedCount);
+            double pantryUtilization = pantryUtilizationScore(ingredients, matchedCount);
+            double missingPenalty = missingPenaltyScore(ingredients, missing.size());
+            double titleRelevance = titleRelevanceScore(candidate, mentioned);
+            double exactMatch = exactMatchScore(mentioned, synonymResolved, ingredients);
+            double coverageBonus = coverageBonusScore(mentioned, matchedCount);
+
+            total += WEIGHT_INGREDIENT_MATCH * ingredientMatch
                     + WEIGHT_PANTRY_UTILIZATION * pantryUtilization
-                    + WEIGHT_PRIMARY_INGREDIENT * primaryIngredient
+                    + WEIGHT_INGREDIENT_IMPORTANCE * importance
                     + WEIGHT_TITLE_RELEVANCE * titleRelevance
                     + WEIGHT_EXACT_MATCH * exactMatch
                     + WEIGHT_COVERAGE_BONUS * coverageBonus
-                    + WEIGHT_COMPLETENESS * completeness
-                    + WEIGHT_SOURCE * reliability
                     - WEIGHT_MISSING_PENALTY * missingPenalty;
+        } else {
+            // No ingredient signal (a pure intent/browse request) - redistribute
+            // the ingredient-signal budget into popularity+reliability so
+            // "healthy recipes" or a blank browse still differentiates
+            // candidates sensibly instead of leaving that weight unused.
+            total += INGREDIENT_SIGNAL_BUDGET * ((popularity + reliability) / 2.0);
         }
 
-        List<String> explanations = buildExplanations(mentioned, matchedCount, missing.size(),
-                pantryUtilization, primaryIngredient);
+        List<String> explanations = buildExplanations(candidate, mentioned, matchedCount, missing.size(),
+                pantryUtilizationScore(ingredients, matchedCount), importance, preferenceTags, categories, combinedText);
 
         return new RecipeScore(candidate, total, matchedCount, missing, explanations);
     }
 
-    // ---------------------------------------------------------------- factor 1: ingredient match
+    // ---------------------------------------------------------------- ingredient match
 
     private int matchedIngredientCount(List<String> ingredients, List<String> mentioned) {
         String ingredientsLower = joinLower(ingredients);
@@ -155,7 +216,7 @@ public class RecipeScoringEngine {
         return matchedCount / (double) mentioned.size();
     }
 
-    // ---------------------------------------------------------------- factor 2: pantry utilization
+    // ---------------------------------------------------------------- pantry utilization
 
     private double pantryUtilizationScore(List<String> ingredients, int matchedCount) {
         if (ingredients.isEmpty()) {
@@ -164,7 +225,7 @@ public class RecipeScoringEngine {
         return Math.min(1.0, matchedCount / (double) ingredients.size());
     }
 
-    // ---------------------------------------------------------------- factor 3: missing-ingredient penalty
+    // ---------------------------------------------------------------- missing-ingredient penalty
 
     private List<String> missingIngredients(List<String> ingredients, List<String> mentioned) {
         List<String> missing = new ArrayList<>();
@@ -185,36 +246,58 @@ public class RecipeScoringEngine {
         return missingCount / (double) ingredients.size();
     }
 
-    // ---------------------------------------------------------------- factor 4: primary ingredient boost
+    // ---------------------------------------------------------------- tiered ingredient importance
 
     /**
-     * Rewards recipes where the mentioned ingredient(s) are central to the
-     * dish, not just incidentally present - "eggs" should favor an omelette
-     * (egg in the title) over a cake that lists one egg among a dozen other
-     * ingredients.
+     * For each mentioned ingredient, determines whether it's the PRIMARY
+     * identity of the dish (in the title), a SECONDARY ingredient (early
+     * in the list but not titled), a MINOR one (late in the list), a
+     * GARNISH ("to serve", "optional", ...), or ABSENT entirely - then
+     * averages the tier weights across every mentioned ingredient. This is
+     * what makes "eggs" favor an omelette (egg in the title = PRIMARY)
+     * over a recipe where egg is one of many ("chicken stock" deep in a
+     * long ingredient list = MINOR, not a real match for a "chicken"
+     * search).
      */
-    private double primaryIngredientScore(RecipeCandidate candidate, List<String> ingredients, List<String> mentioned) {
+    private double ingredientImportanceScore(RecipeCandidate candidate, List<String> ingredients, List<String> mentioned) {
         if (mentioned.isEmpty()) {
             return 0.0;
         }
-        String titleLower = candidate.getTitle() == null ? "" : candidate.getTitle().toLowerCase(Locale.ROOT);
-        boolean inTitle = mentioned.stream().anyMatch(m -> containsAsWord(titleLower, m));
-
-        int window = Math.min(PRIMARY_INGREDIENT_WINDOW, ingredients.size());
-        String earlyIngredientsLower = joinLower(ingredients.subList(0, window));
-        boolean inEarlyIngredients = mentioned.stream().anyMatch(m -> containsAsWord(earlyIngredientsLower, m));
-
-        double score = 0.0;
-        if (inTitle) {
-            score += 0.7;
+        double sum = 0.0;
+        for (String token : mentioned) {
+            sum += importanceTier(candidate, ingredients, token).weight;
         }
-        if (inEarlyIngredients) {
-            score += 0.3;
-        }
-        return Math.min(1.0, score);
+        return sum / mentioned.size();
     }
 
-    // ---------------------------------------------------------------- factor 5: title relevance
+    private ImportanceTier importanceTier(RecipeCandidate candidate, List<String> ingredients, String token) {
+        String titleLower = candidate.getTitle() == null ? "" : candidate.getTitle().toLowerCase(Locale.ROOT);
+        if (containsAsWord(titleLower, token)) {
+            return ImportanceTier.PRIMARY;
+        }
+
+        int matchIndex = -1;
+        for (int i = 0; i < ingredients.size(); i++) {
+            if (containsAsWord(ingredients.get(i).toLowerCase(Locale.ROOT), token)) {
+                matchIndex = i;
+                break;
+            }
+        }
+        if (matchIndex == -1) {
+            return ImportanceTier.ABSENT;
+        }
+
+        String matchedLine = ingredients.get(matchIndex).toLowerCase(Locale.ROOT);
+        if (GARNISH_INDICATORS.stream().anyMatch(matchedLine::contains)) {
+            return ImportanceTier.GARNISH;
+        }
+
+        int size = ingredients.size();
+        double positionFraction = size <= 1 ? 0.0 : matchIndex / (double) (size - 1);
+        return positionFraction <= 0.34 ? ImportanceTier.SECONDARY : ImportanceTier.MINOR;
+    }
+
+    // ---------------------------------------------------------------- title relevance
 
     private double titleRelevanceScore(RecipeCandidate candidate, List<String> mentioned) {
         if (mentioned.isEmpty() || candidate.getTitle() == null) {
@@ -225,7 +308,7 @@ public class RecipeScoringEngine {
         return titleMatches / (double) mentioned.size();
     }
 
-    // ---------------------------------------------------------------- factor 6: exact vs synonym match
+    // ---------------------------------------------------------------- exact vs synonym match
 
     private double exactMatchScore(List<String> mentioned, Set<String> synonymResolved, List<String> ingredients) {
         if (mentioned.isEmpty()) {
@@ -242,7 +325,7 @@ public class RecipeScoringEngine {
         return Math.min(1.0, weightedMatches / mentioned.size());
     }
 
-    // ---------------------------------------------------------------- factor 7: multi-ingredient coverage
+    // ---------------------------------------------------------------- multi-ingredient coverage
 
     /**
      * On top of the plain overlap fraction, explicitly rewards matching
@@ -260,7 +343,195 @@ public class RecipeScoringEngine {
         return Math.min(1.0, (matchedCount - 1) / (double) (mentioned.size() - 1));
     }
 
-    // ---------------------------------------------------------------- factor 8: completeness
+    // ---------------------------------------------------------------- intent alignment
+
+    /**
+     * How well this candidate fits the user's non-ingredient intent
+     * (meal type, dietary preference, budget, occasion) - the signal that
+     * lets "need dinner" prefer a real dinner over a dessert, and "healthy
+     * recipes" prefer vegetables and lean protein over anything that
+     * merely has the word "healthy" nearby. Returns a neutral 0.5 when
+     * there's no preference tag at all, so it never skews a plain
+     * ingredient search.
+     */
+    private double intentAlignmentScore(Set<String> preferenceTags, Set<Category> categories,
+                                         String combinedText, RecipeCandidate candidate) {
+        if (preferenceTags.isEmpty()) {
+            return 0.5;
+        }
+        List<Double> scores = new ArrayList<>();
+        addIfPresent(scores, mealTypeAlignment(preferenceTags, categories));
+        addIfPresent(scores, dietaryAlignment(preferenceTags, combinedText, categories));
+        addIfPresent(scores, budgetAlignment(preferenceTags, candidate));
+        addIfPresent(scores, occasionAlignment(preferenceTags, categories, candidate));
+        return scores.isEmpty() ? 0.5 : average(scores);
+    }
+
+    private Optional<Double> mealTypeAlignment(Set<String> tags, Set<Category> categories) {
+        List<Double> scores = new ArrayList<>();
+        if (tags.contains("breakfast")) {
+            scores.add(categories.contains(Category.BREAKFAST) ? 1.0
+                    : isNotAMeal(categories) ? 0.1 : 0.5);
+        }
+        if (tags.contains("lunch")) {
+            boolean fits = categories.contains(Category.LUNCH) || isSubstantialMeal(categories);
+            scores.add(fits ? 0.9 : isNotAMeal(categories) ? 0.1 : 0.5);
+        }
+        if (tags.contains("dinner") || tags.contains("general_meal")) {
+            boolean substantial = categories.contains(Category.DINNER) || isSubstantialMeal(categories);
+            boolean notAMeal = isNotAMeal(categories) || categories.contains(Category.SNACK);
+            scores.add(substantial ? 1.0 : notAMeal ? 0.05 : 0.5);
+        }
+        if (tags.contains("dessert")) {
+            scores.add(categories.contains(Category.DESSERT) ? 1.0 : 0.3);
+        }
+        if (tags.contains("snack")) {
+            scores.add(categories.contains(Category.SNACK) ? 1.0 : isSubstantialMeal(categories) ? 0.3 : 0.5);
+        }
+        return scores.isEmpty() ? Optional.empty() : Optional.of(average(scores));
+    }
+
+    private Optional<Double> dietaryAlignment(Set<String> tags, String text, Set<Category> categories) {
+        List<Double> scores = new ArrayList<>();
+        if (tags.contains("healthy")) {
+            boolean wholesome = containsAny(text, VEGETABLE_KEYWORDS) || containsAny(text, LEAN_PROTEIN_KEYWORDS);
+            scores.add(categories.contains(Category.DESSERT) ? 0.1 : wholesome ? 0.9 : 0.4);
+        }
+        if (tags.contains("high_protein")) {
+            scores.add(containsAny(text, PROTEIN_KEYWORDS) ? 0.9 : 0.3);
+        }
+        if (tags.contains("vegetarian")) {
+            scores.add(containsAny(text, MEAT_FISH_KEYWORDS) ? 0.05 : 0.9);
+        }
+        if (tags.contains("vegan")) {
+            boolean hasAnimalProduct = containsAny(text, MEAT_FISH_KEYWORDS) || containsAny(text, ANIMAL_PRODUCT_KEYWORDS);
+            scores.add(hasAnimalProduct ? 0.05 : 0.9);
+        }
+        if (tags.contains("low_carb")) {
+            long carbHits = HIGH_CARB_KEYWORDS.stream().filter(text::contains).count();
+            scores.add(carbHits >= 2 ? 0.1 : carbHits == 1 ? 0.4 : 0.9);
+        }
+        if (tags.contains("spicy")) {
+            scores.add(containsAny(text, SPICY_KEYWORDS) ? 0.9 : 0.3);
+        }
+        return scores.isEmpty() ? Optional.empty() : Optional.of(average(scores));
+    }
+
+    private Optional<Double> budgetAlignment(Set<String> tags, RecipeCandidate candidate) {
+        if (!tags.contains("cheap")) {
+            return Optional.empty();
+        }
+        List<String> ingredients = candidate.getIngredients() == null ? List.of() : candidate.getIngredients();
+        if (ingredients.isEmpty()) {
+            return Optional.of(0.5);
+        }
+        double commonFraction = commonIngredientFraction(ingredients);
+        boolean smallList = ingredients.size() <= 8;
+        double score = commonFraction >= 0.6 && smallList ? 0.9 : commonFraction >= 0.6 ? 0.6 : 0.3;
+        return Optional.of(score);
+    }
+
+    private Optional<Double> occasionAlignment(Set<String> tags, Set<Category> categories, RecipeCandidate candidate) {
+        List<Double> scores = new ArrayList<>();
+        int ingredientCount = candidate.getIngredients() == null ? 0 : candidate.getIngredients().size();
+        int stepCount = candidate.getSteps() == null ? 0 : candidate.getSteps().size();
+
+        if (tags.contains("quick") || tags.contains("easy")) {
+            boolean simple = ingredientCount > 0 && ingredientCount <= 8 && stepCount > 0 && stepCount <= 6;
+            scores.add(simple ? 0.9 : 0.4);
+        }
+        if (tags.contains("comfort_food")) {
+            boolean comforting = categories.contains(Category.MAIN_COURSE) || categories.contains(Category.SOUP)
+                    || categories.contains(Category.PASTA) || categories.contains(Category.BREAD);
+            scores.add(comforting ? 0.85 : 0.5);
+        }
+        if (tags.contains("family")) {
+            scores.add(isSubstantialMeal(categories) ? 0.8 : 0.5);
+        }
+        if (tags.contains("date_night")) {
+            boolean special = categories.contains(Category.MAIN_COURSE) || categories.contains(Category.DESSERT);
+            scores.add(special ? 0.7 : 0.5);
+        }
+        return scores.isEmpty() ? Optional.empty() : Optional.of(average(scores));
+    }
+
+    private boolean isSubstantialMeal(Set<Category> categories) {
+        return categories.contains(Category.MAIN_COURSE) || categories.contains(Category.SOUP)
+                || categories.contains(Category.PASTA) || categories.contains(Category.RICE_DISH)
+                || categories.contains(Category.DINNER) || categories.contains(Category.SALAD);
+    }
+
+    private boolean isNotAMeal(Set<Category> categories) {
+        return categories.stream().anyMatch(RecipeCategoryClassifier.NOT_A_MEAL::contains);
+    }
+
+    // ---------------------------------------------------------------- popularity heuristic
+
+    /**
+     * Estimates how "trustworthy"/mainstream a recipe looks using only
+     * metadata we actually have - no fabricated rating or prep-time. A
+     * well-formed title, a reasonable ingredient count, common (not
+     * obscure) ingredients, and a complete write-up are all real,
+     * defensible proxies for quality even without explicit ratings.
+     */
+    private double popularityHeuristicScore(RecipeCandidate candidate) {
+        double completeness = completenessScore(candidate);
+        double titleQuality = titleQualityScore(candidate.getTitle());
+        double ingredientCountReasonableness = ingredientCountReasonablenessScore(candidate);
+        List<String> ingredients = candidate.getIngredients() == null ? List.of() : candidate.getIngredients();
+        double commonIngredientFraction = ingredients.isEmpty() ? 0.3 : Math.min(1.0, commonIngredientFraction(ingredients) * 1.5);
+        return (completeness + titleQuality + ingredientCountReasonableness + commonIngredientFraction) / 4.0;
+    }
+
+    private double titleQualityScore(String title) {
+        if (title == null || title.isBlank()) {
+            return 0.0;
+        }
+        String trimmed = title.trim();
+        int wordCount = trimmed.split("\\s+").length;
+        boolean reasonableLength = wordCount >= 2 && wordCount <= 12;
+        boolean notShouting = !(trimmed.length() > 3 && trimmed.equals(trimmed.toUpperCase(Locale.ROOT))
+                && !trimmed.equals(trimmed.toLowerCase(Locale.ROOT)));
+        boolean notExcessivePunctuation = trimmed.chars().filter(c -> c == '!' || c == '?').count() <= 1;
+
+        int points = 0;
+        if (reasonableLength) {
+            points++;
+        }
+        if (notShouting) {
+            points++;
+        }
+        if (notExcessivePunctuation) {
+            points++;
+        }
+        return points / 3.0;
+    }
+
+    private double ingredientCountReasonablenessScore(RecipeCandidate candidate) {
+        int count = candidate.getIngredients() == null ? 0 : candidate.getIngredients().size();
+        if (count < 2) {
+            return 0.2;
+        }
+        if (count <= 20) {
+            return 1.0;
+        }
+        return 0.5;
+    }
+
+    private double commonIngredientFraction(List<String> ingredients) {
+        if (ingredients.isEmpty()) {
+            return 0.0;
+        }
+        long common = ingredients.stream().filter(this::isCommonIngredientLine).count();
+        return common / (double) ingredients.size();
+    }
+
+    private boolean isCommonIngredientLine(String line) {
+        String lower = line.toLowerCase(Locale.ROOT);
+        return TypoCorrectionUtil.VOCABULARY.stream().anyMatch(v -> containsAsWord(lower, v));
+    }
+
+    // ---------------------------------------------------------------- completeness
 
     private double completenessScore(RecipeCandidate candidate) {
         int points = 0;
@@ -279,7 +550,7 @@ public class RecipeScoringEngine {
         return points / 4.0;
     }
 
-    // ---------------------------------------------------------------- factor 9: source reliability
+    // ---------------------------------------------------------------- source reliability
 
     private double sourceReliabilityScore(RecipeCandidate candidate) {
         String source = candidate.getSource() == null ? "" : candidate.getSource();
@@ -288,40 +559,89 @@ public class RecipeScoringEngine {
 
     // ---------------------------------------------------------------- explanations
 
-    private List<String> buildExplanations(List<String> mentioned, int matchedCount, int missingCount,
-                                            double pantryUtilization, double primaryIngredientScore) {
+    private List<String> buildExplanations(RecipeCandidate candidate, List<String> mentioned, int matchedCount,
+                                            int missingCount, double pantryUtilization, double importance,
+                                            Set<String> preferenceTags, Set<Category> categories, String combinedText) {
         List<String> explanations = new ArrayList<>();
-        if (mentioned.isEmpty()) {
-            return explanations;
+
+        if (!mentioned.isEmpty()) {
+            if (matchedCount == mentioned.size() && mentioned.size() > 1) {
+                explanations.add("Uses all " + mentioned.size() + " ingredients you mentioned.");
+            } else if (matchedCount == mentioned.size() && mentioned.size() == 1) {
+                explanations.add(capitalize(mentioned.get(0)) + " is the primary ingredient.");
+            } else if (mentioned.size() > 1 && matchedCount / (double) mentioned.size() >= 0.6) {
+                explanations.add("High ingredient match.");
+            } else if (matchedCount > 0) {
+                explanations.add("Uses " + matchedCount + " of the " + mentioned.size() + " ingredient(s) you mentioned.");
+            }
+            if (matchedCount > 0 && missingCount <= 2) {
+                explanations.add(missingCount == 0 ? "Nothing else to buy." : "Only " + missingCount + " ingredient(s) missing.");
+            }
+            if (pantryUtilization >= 0.5) {
+                explanations.add("Excellent pantry utilization.");
+            }
+            if (importance >= 0.9 && mentioned.size() > 1) {
+                explanations.add("Your ingredients are central to this dish, not an afterthought.");
+            }
         }
-        if (matchedCount == mentioned.size() && mentioned.size() > 1) {
-            explanations.add("Uses all " + mentioned.size() + " ingredients you mentioned.");
-        } else if (matchedCount > 0) {
-            explanations.add("Uses " + matchedCount + " of the " + mentioned.size() + " ingredient(s) you mentioned.");
-        }
-        if (matchedCount > 0 && missingCount <= 2) {
-            explanations.add(missingCount == 0
-                    ? "Nothing else to buy."
-                    : "Only " + missingCount + " ingredient(s) missing.");
-        }
-        if (pantryUtilization >= 0.5) {
-            explanations.add("Excellent pantry match.");
-        }
-        if (primaryIngredientScore >= 0.7 && mentioned.size() == 1) {
-            explanations.add(capitalize(mentioned.get(0)) + " is the primary ingredient.");
-        }
+
+        addIntentExplanations(explanations, preferenceTags, categories, combinedText, candidate);
+
         return explanations;
+    }
+
+    private void addIntentExplanations(List<String> explanations, Set<String> preferenceTags,
+                                        Set<Category> categories, String combinedText, RecipeCandidate candidate) {
+        if (preferenceTags.contains("dinner") || preferenceTags.contains("general_meal")) {
+            if (isSubstantialMeal(categories)) {
+                explanations.add("Great dinner option.");
+            }
+        }
+        if (preferenceTags.contains("breakfast") && categories.contains(Category.BREAKFAST)) {
+            int ingredientCount = candidate.getIngredients() == null ? 0 : candidate.getIngredients().size();
+            explanations.add(ingredientCount > 0 && ingredientCount <= 6 ? "Quick breakfast." : "Good breakfast option.");
+        }
+        if (preferenceTags.contains("healthy")
+                && (containsAny(combinedText, VEGETABLE_KEYWORDS) || containsAny(combinedText, LEAN_PROTEIN_KEYWORDS))
+                && !categories.contains(Category.DESSERT)) {
+            explanations.add("Great healthy choice.");
+        }
+        if (preferenceTags.contains("high_protein") && containsAny(combinedText, PROTEIN_KEYWORDS)) {
+            explanations.add("High protein option.");
+        }
+        if (preferenceTags.contains("vegetarian") && !containsAny(combinedText, MEAT_FISH_KEYWORDS)) {
+            explanations.add("Vegetarian-friendly.");
+        }
+        if (preferenceTags.contains("vegan")
+                && !containsAny(combinedText, MEAT_FISH_KEYWORDS) && !containsAny(combinedText, ANIMAL_PRODUCT_KEYWORDS)) {
+            explanations.add("Vegan-friendly.");
+        }
+        if (preferenceTags.contains("cheap") && commonIngredientFraction(
+                candidate.getIngredients() == null ? List.of() : candidate.getIngredients()) >= 0.6) {
+            explanations.add("Budget-friendly ingredients.");
+        }
+        if ((preferenceTags.contains("quick") || preferenceTags.contains("easy"))
+                && candidate.getSteps() != null && candidate.getSteps().size() <= 6
+                && candidate.getIngredients() != null && candidate.getIngredients().size() <= 8) {
+            explanations.add("Quick and easy.");
+        }
+        if (preferenceTags.contains("comfort_food")
+                && (categories.contains(Category.MAIN_COURSE) || categories.contains(Category.SOUP)
+                    || categories.contains(Category.PASTA) || categories.contains(Category.BREAD))) {
+            explanations.add("Cozy comfort food.");
+        }
     }
 
     // ---------------------------------------------------------------- diversity / duplicate handling
 
     /**
-     * Walks the score-sorted candidates and skips ones whose title is a
-     * near-duplicate of one already selected, so a results page isn't five
-     * nearly-identical variants of the same dish. Backfills from skipped
-     * (duplicate) candidates, still in score order, if there aren't enough
-     * distinct ones to fill the page - diversity should never mean
-     * returning fewer results than requested when more exist.
+     * Walks the score-sorted candidates and skips ones whose title (plus
+     * inferred primary category) is a near-duplicate of one already
+     * selected, so a results page isn't five nearly-identical variants of
+     * the same dish. Backfills from skipped (duplicate) candidates, still
+     * in score order, if there aren't enough distinct ones to fill the
+     * page - diversity should never mean returning fewer results than
+     * requested when more exist.
      */
     public List<RecipeScore> selectDiverseTopResults(List<RecipeScore> scoredDescending, int maxResults) {
         List<RecipeScore> selected = new ArrayList<>();
@@ -332,7 +652,7 @@ public class RecipeScoringEngine {
             if (selected.size() >= maxResults) {
                 break;
             }
-            Set<String> signature = titleSignature(candidate.candidate().getTitle());
+            Set<String> signature = titleSignature(candidate.candidate());
             boolean isDuplicate = selectedSignatures.stream()
                     .anyMatch(existing -> jaccardSimilarity(existing, signature) >= DUPLICATE_TITLE_SIMILARITY);
 
@@ -354,17 +674,18 @@ public class RecipeScoringEngine {
         return selected;
     }
 
-    private Set<String> titleSignature(String title) {
-        if (title == null) {
-            return Set.of();
-        }
-        String normalized = title.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9 ]", " ");
+    private Set<String> titleSignature(RecipeCandidate candidate) {
+        String title = candidate.getTitle();
         Set<String> signature = new LinkedHashSet<>();
-        for (String word : normalized.split("\\s+")) {
-            if (word.length() >= 3 && !TITLE_NOISE_WORDS.contains(word)) {
-                signature.add(word);
+        if (title != null) {
+            String normalized = title.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9 ]", " ");
+            for (String word : normalized.split("\\s+")) {
+                if (word.length() >= 3 && !TITLE_NOISE_WORDS.contains(word)) {
+                    signature.add(word);
+                }
             }
         }
+        categoryClassifier.primaryCategory(candidate).ifPresent(category -> signature.add("cat:" + category));
         return signature;
     }
 
@@ -383,6 +704,29 @@ public class RecipeScoringEngine {
 
     private String joinLower(List<String> lines) {
         return String.join(" ", lines).toLowerCase(Locale.ROOT);
+    }
+
+    private String combinedLowerText(RecipeCandidate candidate) {
+        String title = candidate.getTitle() == null ? "" : candidate.getTitle();
+        String ingredients = candidate.getIngredients() == null ? "" : String.join(" ", candidate.getIngredients());
+        return (title + " " + ingredients).toLowerCase(Locale.ROOT);
+    }
+
+    private boolean containsAny(String text, Set<String> keywords) {
+        for (String keyword : keywords) {
+            if (text.contains(keyword)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void addIfPresent(List<Double> scores, Optional<Double> value) {
+        value.ifPresent(scores::add);
+    }
+
+    private double average(List<Double> values) {
+        return values.stream().mapToDouble(Double::doubleValue).average().orElse(0.5);
     }
 
     /**

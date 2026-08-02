@@ -4,6 +4,7 @@ import lombok.Builder;
 import lombok.Getter;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * The Retrieval Orchestrator's decision: what kind of request this is, and
@@ -37,4 +38,14 @@ public class RetrievalPlan {
      * turns.
      */
     private List<String> synonymResolvedIngredients;
+    /**
+     * Intent/preference signals parsed from generic or conversational
+     * requests - meal type ("dinner", "breakfast"), dietary preference
+     * ("healthy", "vegetarian", "vegan", "low_carb", "high_protein"),
+     * budget ("cheap"), or occasion ("comfort_food", "quick", "easy",
+     * "family", "date_night", "late_night"). Used by RecipeScoringEngine
+     * to align rankings with what the user actually meant by e.g. "need
+     * dinner" or "I'm hungry", not just literal keyword text matching.
+     */
+    private Set<String> preferenceTags;
 }

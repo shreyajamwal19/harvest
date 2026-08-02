@@ -1,14 +1,16 @@
 package com.harvest.chef.util;
 
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
 /**
  * Deterministic, dictionary-based typo tolerance for Retrieval Planning.
  * No ML/LLM involved (the reasoning pipeline is rule-based only) - just a
- * small curated correction map for common misspellings, plus a generic
- * edit-distance fallback against a fixed vocabulary of frequent ingredient
- * and control words.
+ * small curated correction map for common misspellings, a hierarchical
+ * repeated-character collapse for noisy/emphatic input ("eggggg",
+ * "cheeeeeeese"), and a generic edit-distance fallback against a fixed
+ * vocabulary of frequent ingredient and control words.
  *
  * Deliberately conservative: the fuzzy fallback only fires for tokens of a
  * reasonable length within a small edit distance, so real (if unusual)
@@ -44,9 +46,13 @@ public final class TypoCorrectionUtil {
             Map.entry("vegatable", "vegetable")
     );
 
-    // Common ingredient + control-word vocabulary used only for the generic
-    // fuzzy fallback below - not an exhaustive ingredient catalog.
-    private static final Set<String> VOCABULARY = Set.of(
+    /**
+     * Common ingredient + control-word vocabulary. Public so other
+     * deterministic scoring code (e.g. the popularity heuristic in
+     * RecipeScoringEngine) can reuse the same "common ingredient" notion
+     * instead of maintaining a second, duplicate list.
+     */
+    public static final Set<String> VOCABULARY = Set.of(
             "egg", "eggs", "tomato", "tomatoes", "potato", "potatoes", "onion", "onions",
             "garlic", "cheese", "chicken", "beef", "pork", "rice", "pasta", "flour",
             "sugar", "butter", "milk", "cream", "bread", "fish", "shrimp", "spinach",
@@ -62,23 +68,83 @@ public final class TypoCorrectionUtil {
     private TypoCorrectionUtil() {
     }
 
-    /** Returns the corrected word, or the original word unchanged if no confident correction exists. */
+    /**
+     * Returns the corrected word, or the original word unchanged if no
+     * confident correction exists. Tries, in order: the word as typed;
+     * a "light" collapse of any run of 3+ identical letters down to 2
+     * (catches emphatic typing like "eggggg" without disturbing genuine
+     * double letters, e.g. "egg" itself); a "full" collapse of any run of
+     * 2+ identical letters down to 1 (catches noisier typos like
+     * "tomatoss" -> "tomatos" -> "tomatoes", "ricce" -> "rice"); finally a
+     * conservative edit-distance fallback on the original word.
+     */
     public static String correct(String word) {
         if (word == null || word.isBlank()) {
             return word;
         }
-        String lower = word.toLowerCase(java.util.Locale.ROOT);
+        String lower = word.toLowerCase(Locale.ROOT);
 
-        if (VOCABULARY.contains(lower)) {
-            return lower; // already a known-good word, nothing to correct
+        String exact = exactMatch(lower);
+        if (exact != null) {
+            return exact;
         }
-        if (KNOWN_TYPOS.containsKey(lower)) {
-            return KNOWN_TYPOS.get(lower);
+
+        String lightCollapsed = collapseRuns(lower, 3, 2);
+        if (!lightCollapsed.equals(lower)) {
+            String exactLight = exactMatch(lightCollapsed);
+            if (exactLight != null) {
+                return exactLight;
+            }
         }
+
+        String fullCollapsed = collapseRuns(lower, 2, 1);
+        if (!fullCollapsed.equals(lower) && !fullCollapsed.equals(lightCollapsed)) {
+            String exactFull = exactMatch(fullCollapsed);
+            if (exactFull != null) {
+                return exactFull;
+            }
+        }
+
         if (lower.length() < 5) {
             return lower; // too short for edit-distance correction to be reliable
         }
+        return fuzzyMatch(lower);
+    }
 
+    private static String exactMatch(String word) {
+        if (VOCABULARY.contains(word)) {
+            return word;
+        }
+        return KNOWN_TYPOS.get(word);
+    }
+
+    /**
+     * Collapses any run of the same character whose length is at least
+     * {@code minRunLength} down to exactly {@code collapseTo} occurrences.
+     * Runs shorter than the threshold are left untouched - this is what
+     * lets a two-stage (3->2, then 2->1) hierarchy protect real double
+     * letters ("egg", "cheese") from being mangled by an overly aggressive
+     * single pass.
+     */
+    private static String collapseRuns(String word, int minRunLength, int collapseTo) {
+        StringBuilder result = new StringBuilder();
+        int i = 0;
+        while (i < word.length()) {
+            char c = word.charAt(i);
+            int runLength = 1;
+            while (i + runLength < word.length() && word.charAt(i + runLength) == c) {
+                runLength++;
+            }
+            int keep = runLength >= minRunLength ? collapseTo : runLength;
+            for (int k = 0; k < keep; k++) {
+                result.append(c);
+            }
+            i += runLength;
+        }
+        return result.toString();
+    }
+
+    private static String fuzzyMatch(String lower) {
         String best = null;
         int bestDistance = Integer.MAX_VALUE;
         for (String candidate : VOCABULARY) {
@@ -88,7 +154,6 @@ public final class TypoCorrectionUtil {
                 best = candidate;
             }
         }
-
         return (best != null && bestDistance <= 2) ? best : lower;
     }
 
