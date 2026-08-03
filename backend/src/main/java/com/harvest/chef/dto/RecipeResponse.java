@@ -4,10 +4,19 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import java.util.List;
 
+/**
+ * Setters are required (not just Getter/Builder, unlike most other DTOs here) because
+ * SessionStateService/ContextAssemblyService JSON-serialize and deserialize this class via the
+ * default Spring Boot ObjectMapper to persist/restore the last shown recipe(s) for AI Chef
+ * Reasoning Layer follow-up grounding - without setters, Jackson has no way to populate a
+ * no-args-constructed instance's private fields.
+ */
 @Getter
+@Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor

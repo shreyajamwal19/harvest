@@ -8,6 +8,8 @@ import com.harvest.chef.dto.RecipeCandidate;
 import com.harvest.chef.dto.RecipeResponse;
 import com.harvest.chef.dto.RetrievalBundle;
 import com.harvest.chef.dto.RetrievalPlan;
+import com.harvest.chef.reasoning.ChefReasoningResult;
+import com.harvest.chef.reasoning.ChefReasoningService;
 import com.harvest.chef.retrieval.RecipeEvaluationService;
 import com.harvest.chef.retrieval.RecipeGenerationService;
 import com.harvest.chef.retrieval.RetrievalOrchestrator;
@@ -18,19 +20,24 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 /**
  * Used when the Retrieval Orchestrator has classified the request as
  * RECIPE. Retrieves grounded candidates, ranks them deterministically, and
  * falls back to an honest "nothing suitable" result (never a fabricated
- * recipe) when nothing grounded is a fit.
+ * recipe) when nothing grounded is a fit. The deterministic ranking and
+ * recipe content are never influenced by the AI Chef Reasoning Layer - it
+ * only ever supplies the conversational message describing what's already
+ * been decided.
  *
  * On a "more" continuation turn (see {@link RetrievalPlan#isContinuation()}),
  * excludes recipes already shown earlier in the session instead of
  * re-running a brand-new, unrelated search. After composing, records the
- * search and shown titles via {@link SessionStateService} so a later
- * "more" turn can continue from here.
+ * search, shown titles, and full shown-recipe content via
+ * {@link SessionStateService} so a later "more" turn (or a follow-up turn
+ * handled directly in {@code CompositionService}) can continue from here.
  */
 @Component
 @RequiredArgsConstructor
@@ -41,6 +48,7 @@ public class RecipeComposer implements ResponseComposer {
     private final RecipeEvaluationService recipeEvaluationService;
     private final RecipeGenerationService recipeGenerationService;
     private final SessionStateService sessionStateService;
+    private final ChefReasoningService chefReasoningService;
 
     @Override
     public ChefResponse compose(ConversationContext context, RetrievalPlan plan) {
@@ -61,14 +69,22 @@ public class RecipeComposer implements ResponseComposer {
             recipes = recipeGenerationService.generate(inspiration);
         }
 
-        String message = buildSummaryMessage(recipes, plan.isContinuation());
+        // AI Chef Reasoning Layer: interprets the request and explains/recommends among the
+        // recipes above. It cannot change which recipes are returned - only the message, and
+        // only the response type when nothing was found at all (see ChefReasoningService).
+        Optional<ChefReasoningResult> reasoning = chefReasoningService.reasonAboutRecipes(context, plan, recipes);
+
+        String message = reasoning.map(ChefReasoningResult::getMessage)
+                .orElseGet(() -> buildSummaryMessage(recipes, plan.isContinuation()));
+        ChefResponseType responseType = reasoning.map(ChefReasoningResult::getType)
+                .orElse(ChefResponseType.RECIPE);
 
         sessionStateService.updateAfterRecipeTurn(context.getSessionId(), plan, recipes);
 
         return ChefResponse.builder()
-                .type(ChefResponseType.RECIPE)
+                .type(responseType)
                 .message(message)
-                .recipes(recipes)
+                .recipes(responseType == ChefResponseType.RECIPE ? recipes : null)
                 .build();
     }
 

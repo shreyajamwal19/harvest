@@ -49,6 +49,15 @@ public class ConversationSession {
     @Column(name = "shown_recipe_titles", columnDefinition = "TEXT")
     private String shownRecipeTitles;
 
+    /**
+     * The full, structured recipe(s) shown on the most recent recipe turn (JSON-serialized
+     * {@code List<RecipeResponse>}), so a later follow-up turn ("make it vegetarian", "double
+     * it") can be grounded in the actual retrieved recipe content - not just its title - without
+     * a fresh retrieval. Populated by SessionStateService; overwritten each recipe turn.
+     */
+    @Column(name = "last_shown_recipes_json", columnDefinition = "TEXT")
+    private String lastShownRecipesJson;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

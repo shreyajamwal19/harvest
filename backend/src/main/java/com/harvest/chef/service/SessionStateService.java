@@ -1,9 +1,11 @@
 package com.harvest.chef.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.harvest.chef.dto.RecipeResponse;
 import com.harvest.chef.dto.RetrievalPlan;
 import com.harvest.chef.repository.ConversationSessionRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,12 +28,14 @@ import java.util.Set;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class SessionStateService {
 
     /** Bounds how many shown titles are remembered per session, so this never grows unbounded. */
     private static final int MAX_SHOWN_TITLES = 60;
 
     private final ConversationSessionRepository sessionRepository;
+    private final ObjectMapper objectMapper;
 
     @Transactional
     public void updateAfterRecipeTurn(Long sessionId, RetrievalPlan plan, List<RecipeResponse> recipes) {
@@ -46,6 +50,7 @@ public class SessionStateService {
 
             if (recipes != null && !recipes.isEmpty()) {
                 session.setShownRecipeTitles(appendShownTitles(session.getShownRecipeTitles(), recipes));
+                session.setLastShownRecipesJson(serializeRecipes(recipes));
             }
 
             sessionRepository.save(session);
@@ -73,5 +78,18 @@ public class SessionStateService {
             capped = capped.subList(excess, capped.size()); // keep the most recently shown titles
         }
         return String.join("|", capped);
+    }
+
+    /**
+     * Never lets a serialization failure break the recipe turn itself - worst case, the next
+     * follow-up turn has nothing to ground against and falls back to a fresh retrieval.
+     */
+    private String serializeRecipes(List<RecipeResponse> recipes) {
+        try {
+            return objectMapper.writeValueAsString(recipes);
+        } catch (Exception e) {
+            log.warn("Failed to serialize shown recipes for session state: {}", e.getMessage());
+            return null;
+        }
     }
 }

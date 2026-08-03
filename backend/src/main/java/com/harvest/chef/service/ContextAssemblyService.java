@@ -1,13 +1,17 @@
 package com.harvest.chef.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.harvest.chef.dto.ConversationContext;
 import com.harvest.chef.dto.ConversationTurn;
+import com.harvest.chef.dto.RecipeResponse;
 import com.harvest.chef.entity.ConversationMessage;
 import com.harvest.chef.entity.ConversationSession;
 import com.harvest.chef.repository.ConversationMessageRepository;
 import com.harvest.chef.repository.ConversationSessionRepository;
 import com.harvest.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,10 +33,12 @@ import java.util.Set;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ContextAssemblyService {
 
     private final ConversationSessionRepository sessionRepository;
     private final ConversationMessageRepository messageRepository;
+    private final ObjectMapper objectMapper;
 
     @Transactional
     public ConversationContext assemble(Long userId, Long requestedSessionId, String currentMessage) {
@@ -47,6 +53,7 @@ public class ContextAssemblyService {
                 .lastSearchQuery(session.getLastSearchQuery())
                 .lastMentionedIngredients(splitCsv(session.getLastMentionedIngredients()))
                 .shownRecipeTitles(splitPipe(session.getShownRecipeTitles()))
+                .lastShownRecipes(deserializeRecipes(session.getLastShownRecipesJson()))
                 .build();
     }
 
@@ -92,5 +99,24 @@ public class ContextAssemblyService {
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
                 .toList());
+    }
+
+    /**
+     * Never lets a malformed/stale JSON blob break the whole request - worst case, follow-up
+     * reasoning simply has nothing to ground against and CompositionService falls back to a
+     * fresh retrieval, exactly as if no prior recipe turn existed.
+     */
+    private List<RecipeResponse> deserializeRecipes(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<List<RecipeResponse>>() {
+            });
+        } catch (Exception e) {
+            log.warn("Failed to deserialize last shown recipes for session - treating as none: {}",
+                    e.getMessage());
+            return List.of();
+        }
     }
 }

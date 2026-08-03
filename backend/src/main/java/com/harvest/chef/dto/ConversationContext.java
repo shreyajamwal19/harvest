@@ -20,4 +20,10 @@ public class ConversationContext {
     private List<String> lastMentionedIngredients;
     /** Normalized titles already shown to the user this session, so "more" doesn't repeat them. */
     private Set<String> shownRecipeTitles;
+    /**
+     * The full recipe(s) shown on the most recent recipe turn, deserialized from session state.
+     * Empty if none yet this session. Used to ground the AI Chef Reasoning Layer's follow-up
+     * handling ("make it vegetarian", "double it") without a fresh retrieval.
+     */
+    private List<RecipeResponse> lastShownRecipes;
 }
