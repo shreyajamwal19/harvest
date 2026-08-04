@@ -6,30 +6,39 @@ import com.harvest.chef.dto.ConversationContext;
 import com.harvest.chef.dto.RetrievalPlan;
 import com.harvest.chef.knowledge.manager.KnowledgeProviderManager;
 import com.harvest.chef.knowledge.model.IngredientProfile;
+import com.harvest.chef.reasoning.ChefReasoningResult;
+import com.harvest.chef.reasoning.ChefReasoningService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
- * Used when the Retrieval Orchestrator classifies the request as
- * TECHNIQUE, not RECIPE. When the plan flags ingredient intelligence as
- * relevant (e.g. "what can I substitute for buttermilk"), that context is
- * pulled in and folded into the answer.
+ * Used when the Retrieval Orchestrator classifies the request as TECHNIQUE, not RECIPE. When
+ * the plan flags ingredient intelligence as relevant (e.g. "what can I substitute for
+ * buttermilk"), that context is pulled in and folded into the question passed downstream.
  *
- * No cooking-knowledge or ingredient-intelligence provider is currently
- * registered (their only implementations were LLM-backed and have been
- * removed) - {@link KnowledgeProviderManager} will honestly return empty/
- * null rather than any provider fabricating an answer. This composer
- * reflects that back to the user directly instead of a 503, since "I
- * don't have a grounded answer for that yet" is itself an honest,
- * non-fabricated response.
+ * No cooking-knowledge or ingredient-intelligence provider is currently registered (their only
+ * implementations were LLM-backed and have been removed) - {@link KnowledgeProviderManager}
+ * will honestly return empty/null rather than any provider fabricating an answer.
+ *
+ * The AI Chef Reasoning Layer ({@link ChefReasoningService#reasonAboutTechnique}) then explains
+ * the answer in chef voice: when {@code KnowledgeProviderManager} did have a grounded answer,
+ * the model must not contradict it; when it didn't (currently always), the model still answers
+ * using general culinary knowledge - this is exactly the "explain techniques" / "chef coaching"
+ * capability the reasoning layer exists for, just marked lower confidence (see
+ * {@code ReasoningConfidence}). If the reasoning layer is unavailable or fails, this falls back
+ * to the raw grounded answer (or, if there wasn't one either, the same honest "nothing grounded
+ * yet" message this composer has always returned) - never a 503, and never silently different
+ * behavior when zero API keys are configured versus before this layer existed.
  */
 @Component
 @RequiredArgsConstructor
 public class TechniqueAnswerComposer implements ResponseComposer {
 
     private final KnowledgeProviderManager knowledgeProviderManager;
+    private final ChefReasoningService chefReasoningService;
 
     @Override
     public ChefResponse compose(ConversationContext context, RetrievalPlan plan) {
@@ -42,17 +51,25 @@ public class TechniqueAnswerComposer implements ResponseComposer {
             question = appendIngredientContext(question, profiles);
         }
 
-        String answer = knowledgeProviderManager.retrieveCookingKnowledge(question, context.getCurrentMessage());
-        if (answer == null) {
-            answer = "I don't have a grounded technique answer for that right now - "
-                    + "no cooking-knowledge source has that covered yet.";
-        }
+        String groundedAnswer = knowledgeProviderManager.retrieveCookingKnowledge(question, context.getCurrentMessage());
+
+        Optional<ChefReasoningResult> reasoning = chefReasoningService.reasonAboutTechnique(context, groundedAnswer);
+        String message = reasoning.map(ChefReasoningResult::getMessage)
+                .orElseGet(() -> fallbackMessage(groundedAnswer));
 
         return ChefResponse.builder()
                 .type(ChefResponseType.TECHNIQUE_ANSWER)
-                .message(answer)
+                .message(message)
                 .recipes(null)
                 .build();
+    }
+
+    private String fallbackMessage(String groundedAnswer) {
+        if (groundedAnswer != null) {
+            return groundedAnswer;
+        }
+        return "I don't have a grounded technique answer for that right now - "
+                + "no cooking-knowledge source has that covered yet.";
     }
 
     private String appendIngredientContext(String question, List<IngredientProfile> profiles) {

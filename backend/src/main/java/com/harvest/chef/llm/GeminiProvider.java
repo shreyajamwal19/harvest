@@ -48,7 +48,7 @@ public class GeminiProvider extends AbstractLLMProvider {
     }
 
     @Override
-    protected String doComplete(String systemPrompt, String userPrompt, int maxTokens) {
+    protected ProviderCompletion doComplete(String systemPrompt, String userPrompt, int maxTokens) {
         long start = System.currentTimeMillis();
         try {
             String url = API_BASE + properties.getModel() + ":generateContent?key="
@@ -74,9 +74,10 @@ public class GeminiProvider extends AbstractLLMProvider {
                 throw new LLMProviderException(name(), type, "gemini returned status " + response.statusCode());
             }
 
-            String text = extractText(response.body());
-            log.info("[llm:gemini] call ok: latencyMs={}", latencyMs);
-            return text;
+            ProviderCompletion completion = extractCompletion(response.body());
+            log.info("[llm:gemini] call ok: latencyMs={} inputTokens={} outputTokens={}",
+                    latencyMs, completion.inputTokens(), completion.outputTokens());
+            return completion;
         } catch (IOException e) {
             long latencyMs = System.currentTimeMillis() - start;
             log.warn("[llm:gemini] network failure after {}ms: {}", latencyMs, e.getMessage());
@@ -107,7 +108,7 @@ public class GeminiProvider extends AbstractLLMProvider {
         return objectMapper.writeValueAsString(root);
     }
 
-    private String extractText(String responseBody) {
+    private ProviderCompletion extractCompletion(String responseBody) {
         try {
             JsonNode root = objectMapper.readTree(responseBody);
             String text = root.path("candidates").path(0).path("content")
@@ -116,7 +117,10 @@ public class GeminiProvider extends AbstractLLMProvider {
                 throw new LLMProviderException(name(), LLMProviderException.ErrorType.UNKNOWN,
                         "gemini returned an empty completion");
             }
-            return text;
+            JsonNode usage = root.path("usageMetadata");
+            int inputTokens = usage.path("promptTokenCount").asInt(-1);
+            int outputTokens = usage.path("candidatesTokenCount").asInt(-1);
+            return new ProviderCompletion(text, inputTokens, outputTokens);
         } catch (LLMProviderException e) {
             throw e;
         } catch (Exception e) {

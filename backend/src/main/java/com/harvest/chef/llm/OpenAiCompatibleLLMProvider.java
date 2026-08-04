@@ -47,7 +47,7 @@ public abstract class OpenAiCompatibleLLMProvider extends AbstractLLMProvider {
     }
 
     @Override
-    protected String doComplete(String systemPrompt, String userPrompt, int maxTokens) {
+    protected ProviderCompletion doComplete(String systemPrompt, String userPrompt, int maxTokens) {
         long start = System.currentTimeMillis();
         try {
             String requestBody = buildRequestBody(systemPrompt, userPrompt, maxTokens);
@@ -73,9 +73,10 @@ public abstract class OpenAiCompatibleLLMProvider extends AbstractLLMProvider {
                         name() + " returned status " + response.statusCode());
             }
 
-            String text = extractMessageContent(response.body());
-            log.info("[llm:{}] call ok: latencyMs={}", name(), latencyMs);
-            return text;
+            ProviderCompletion completion = extractCompletion(response.body());
+            log.info("[llm:{}] call ok: latencyMs={} inputTokens={} outputTokens={}",
+                    name(), latencyMs, completion.inputTokens(), completion.outputTokens());
+            return completion;
         } catch (IOException e) {
             long latencyMs = System.currentTimeMillis() - start;
             log.warn("[llm:{}] network failure after {}ms: {}", name(), latencyMs, e.getMessage());
@@ -105,7 +106,7 @@ public abstract class OpenAiCompatibleLLMProvider extends AbstractLLMProvider {
         return objectMapper.writeValueAsString(root);
     }
 
-    private String extractMessageContent(String responseBody) {
+    private ProviderCompletion extractCompletion(String responseBody) {
         try {
             JsonNode root = objectMapper.readTree(responseBody);
             String text = root.path("choices").path(0).path("message").path("content").asText("");
@@ -113,7 +114,9 @@ public abstract class OpenAiCompatibleLLMProvider extends AbstractLLMProvider {
                 throw new LLMProviderException(name(), LLMProviderException.ErrorType.UNKNOWN,
                         name() + " returned an empty completion");
             }
-            return text;
+            int inputTokens = root.path("usage").path("prompt_tokens").asInt(-1);
+            int outputTokens = root.path("usage").path("completion_tokens").asInt(-1);
+            return new ProviderCompletion(text, inputTokens, outputTokens);
         } catch (LLMProviderException e) {
             throw e;
         } catch (Exception e) {

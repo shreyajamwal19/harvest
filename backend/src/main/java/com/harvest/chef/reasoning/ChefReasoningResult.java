@@ -12,6 +12,10 @@ import lombok.Getter;
  * never a recipe list. The set of recipes shown to the user is always the
  * deterministic pipeline's own ranked output; this layer only ever talks
  * about that data, it never chooses or fabricates what's in it.
+ *
+ * {@code mode} and {@code confidence} are carried through purely for
+ * observability logging in {@code ChefReasoningService} - they don't change
+ * how the response is rendered.
  */
 @Getter
 @Builder
@@ -19,4 +23,6 @@ import lombok.Getter;
 public class ChefReasoningResult {
     private ChefResponseType type;
     private String message;
+    private ReasoningMode mode;
+    private ReasoningConfidence confidence;
 }

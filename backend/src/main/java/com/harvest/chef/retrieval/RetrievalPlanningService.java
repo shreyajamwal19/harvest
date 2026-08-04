@@ -155,7 +155,10 @@ public class RetrievalPlanningService {
             "more", "more recipes", "more options", "more please", "show more",
             "give me more", "any more", "anything else", "what else", "something else",
             "others", "other options", "different options", "another", "another one",
-            "next", "more of those", "more like that", "more ideas"
+            "next", "more of those", "more like that", "more ideas",
+            "i dont like that one", "i dont like this one", "dont like that one",
+            "dont like it", "not this one", "not that one", "show another",
+            "show me another", "different recipe", "different one"
     );
 
     public RetrievalPlan plan(ConversationContext context) {

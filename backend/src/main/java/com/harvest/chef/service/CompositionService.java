@@ -7,6 +7,7 @@ import com.harvest.chef.dto.RecipeResponse;
 import com.harvest.chef.dto.RetrievalPlan;
 import com.harvest.chef.reasoning.ChefReasoningResult;
 import com.harvest.chef.reasoning.ChefReasoningService;
+import com.harvest.chef.reasoning.ReasoningMode;
 import com.harvest.chef.retrieval.FollowUpIntentDetector;
 import com.harvest.chef.retrieval.RetrievalPlanningService;
 import com.harvest.chef.service.composer.RecipeComposer;
@@ -21,16 +22,18 @@ import java.util.Optional;
 /**
  * Stage 3 - Composition.
  *
- * Checks for a follow-up turn about a recipe already shown this session
- * first ({@link FollowUpIntentDetector}) - if one is detected and the
- * session has previously shown recipes to ground against, it's handled
- * directly via the AI Chef Reasoning Layer with NO retrieval at all
- * (nothing to search or rank; the recipe(s) are already known).
+ * Checks for a follow-up turn about a recipe already shown this session first
+ * ({@link FollowUpIntentDetector#classify}) - if one is classified (comparison, adaptation,
+ * coaching, or an "explain why") and the session has previously shown recipes to ground
+ * against, it's handled directly via the AI Chef Reasoning Layer with NO retrieval at all
+ * (nothing to search or rank; the recipe(s) are already known). A message the detector
+ * recognizes as wanting genuinely different recipes ("show another", "I don't like that one")
+ * is deliberately left unclassified here, so it falls through to the normal flow below, where
+ * {@link RetrievalPlanningService}'s own continuation handling takes it from there.
  *
- * Otherwise, runs the Retrieval Orchestrator's planning step unconditionally
- * right after Context Assembly - there is no Goal Reasoning / Sufficiency
- * Gate stage upstream anymore - then dispatches to the matching composer
- * based on the plan's classified intent.
+ * Otherwise, runs the Retrieval Orchestrator's planning step unconditionally right after
+ * Context Assembly - there is no Goal Reasoning / Sufficiency Gate stage upstream anymore -
+ * then dispatches to the matching composer based on the plan's classified intent.
  */
 @Service
 @RequiredArgsConstructor
@@ -67,21 +70,25 @@ public class CompositionService {
         if (previouslyShown == null || previouslyShown.isEmpty()) {
             return Optional.empty();
         }
-        if (!followUpIntentDetector.isFollowUp(context.getCurrentMessage())) {
+
+        Optional<ReasoningMode> mode = followUpIntentDetector.classify(context.getCurrentMessage());
+        if (mode.isEmpty()) {
             return Optional.empty();
         }
 
-        Optional<ChefReasoningResult> reasoning = chefReasoningService.reasonAboutFollowUp(context, previouslyShown);
+        Optional<ChefReasoningResult> reasoning =
+                chefReasoningService.reasonAboutFollowUp(context, mode.get(), previouslyShown);
         if (reasoning.isEmpty()) {
-            // The reasoning layer is what makes a follow-up turn meaningful (adapting/comparing
-            // the shown recipe(s) in prose) - without it, there's nothing useful to add beyond
-            // re-running retrieval, so fall through to the normal flow rather than guess.
-            log.info("[ai-chef] Follow-up detected but reasoning layer unavailable - "
-                    + "falling back to normal retrieval flow.");
+            // The reasoning layer is what makes a follow-up turn meaningful (adapting/comparing/
+            // coaching on the shown recipe(s) in prose) - without it, there's nothing useful to
+            // add beyond re-running retrieval, so fall through to the normal flow rather than guess.
+            log.info("[ai-chef] Follow-up classified as mode={} but reasoning layer unavailable - "
+                    + "falling back to normal retrieval flow.", mode.get());
             return Optional.empty();
         }
 
-        log.info("[ai-chef] Follow-up turn handled via AI Chef Reasoning Layer, no retrieval run.");
+        log.info("[ai-chef] Follow-up turn handled via AI Chef Reasoning Layer (mode={}), no retrieval run.",
+                mode.get());
         return Optional.of(ChefResponse.builder()
                 .type(ChefResponseType.RECIPE)
                 .message(reasoning.get().getMessage())

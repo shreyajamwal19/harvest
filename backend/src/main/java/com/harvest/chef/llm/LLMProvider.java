@@ -22,10 +22,11 @@ public interface LLMProvider {
     boolean isAvailable();
 
     /**
-     * Calls the provider and returns its raw text completion.
+     * Calls the provider and returns its completion, including token usage where the provider
+     * reports it.
      *
      * @throws LLMProviderException on any failure (auth, quota, rate limit, timeout, or
      *                              anything else) - never returns null or partial output.
      */
-    String complete(String systemPrompt, String userPrompt, int maxTokens);
+    ProviderCompletion complete(String systemPrompt, String userPrompt, int maxTokens);
 }

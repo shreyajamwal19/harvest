@@ -15,7 +15,7 @@ public abstract class AbstractLLMProvider implements LLMProvider {
     private static final int MAX_ATTEMPTS = 2;
 
     @Override
-    public final String complete(String systemPrompt, String userPrompt, int maxTokens) {
+    public final ProviderCompletion complete(String systemPrompt, String userPrompt, int maxTokens) {
         LLMProviderException lastFailure = null;
 
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -41,5 +41,5 @@ public abstract class AbstractLLMProvider implements LLMProvider {
     }
 
     /** The actual provider call for a single attempt. Never retried internally - see {@link #complete}. */
-    protected abstract String doComplete(String systemPrompt, String userPrompt, int maxTokens);
+    protected abstract ProviderCompletion doComplete(String systemPrompt, String userPrompt, int maxTokens);
 }
