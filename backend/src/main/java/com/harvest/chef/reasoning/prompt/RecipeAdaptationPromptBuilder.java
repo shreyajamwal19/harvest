@@ -31,6 +31,10 @@ public class RecipeAdaptationPromptBuilder {
             - If the requested change can't be reasoned about from the recipe(s) below (e.g. it
               refers to a dish never shown), say so honestly instead of guessing.
             - Do not mention scores, algorithms, or the pipeline itself.
+            """
+            + RecipeContextFormatter.VOICE_GUIDANCE
+            + """
+
 
             Respond with ONLY a single JSON object, no prose, no markdown fences, matching exactly:
             { "message": "your conversational response" }

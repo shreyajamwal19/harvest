@@ -29,6 +29,10 @@ public class RecipeComparisonPromptBuilder {
               If the data doesn't clearly settle their specific angle (e.g. they ask "which is
               cheaper" and there's no cost data), say that honestly rather than guessing a number.
             - Do not mention scores, algorithms, or the pipeline itself.
+            """
+            + RecipeContextFormatter.VOICE_GUIDANCE
+            + """
+
 
             Respond with ONLY a single JSON object, no prose, no markdown fences, matching exactly:
             { "message": "your conversational response" }

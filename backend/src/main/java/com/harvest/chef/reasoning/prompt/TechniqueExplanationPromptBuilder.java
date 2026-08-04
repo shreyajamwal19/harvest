@@ -23,6 +23,10 @@ public class TechniqueExplanationPromptBuilder {
             a grounded answer for this (given below) - your job is to deliver it the way a chef
             would explain it out loud: natural, confident, encouraging, concise. Never contradict
             the grounded answer or invent facts beyond it.
+            """
+            + RecipeContextFormatter.VOICE_GUIDANCE
+            + """
+
 
             Respond with ONLY a single JSON object, no prose, no markdown fences, matching exactly:
             { "message": "your conversational response" }
@@ -41,6 +45,10 @@ public class TechniqueExplanationPromptBuilder {
             - If the question is too vague or too specialized to answer responsibly with general
               knowledge, say so honestly and ask ONE short clarifying question rather than guessing.
             - Do not mention scores, algorithms, providers, or the pipeline itself.
+            """
+            + RecipeContextFormatter.VOICE_GUIDANCE
+            + """
+
 
             Respond with ONLY a single JSON object, no prose, no markdown fences, matching exactly:
             { "message": "your conversational response" }

@@ -37,6 +37,10 @@ public class ChefCoachingPromptBuilder {
             - If the question is too vague to answer usefully even with general knowledge, ask ONE
               short clarifying question instead of guessing.
             - Do not mention scores, algorithms, or the pipeline itself.
+            """
+            + RecipeContextFormatter.VOICE_GUIDANCE
+            + """
+
 
             Respond with ONLY a single JSON object, no prose, no markdown fences, matching exactly:
             { "message": "your conversational response" }

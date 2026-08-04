@@ -88,7 +88,18 @@ public class RetrievalPlanningService {
             "healthy", "dinner", "lunch", "breakfast", "brunch", "dessert", "snack",
             "cheap", "budget", "inexpensive", "affordable", "quick", "fast", "easy",
             "simple", "beginner", "spicy", "vegetarian", "vegan", "protein", "carb",
-            "carbs", "comfort", "comforting", "family", "food", "foods", "meal", "meals", "high"
+            "carbs", "comfort", "comforting", "family", "food", "foods", "meal", "meals", "high",
+            // Vague/emotional/situational phrasing that carries intent but no ingredient signal
+            // of its own ("I'm tired", "surprise me", "I'm broke") - see detectPreferenceTags()
+            // and PREFERENCE_KEYWORDS below for how these get mapped to real scoring signal
+            // instead of being silently dropped or, worse, mis-extracted as bogus "ingredients".
+            "surprise", "decide", "chefs", "choice", "whatever", "know", "idea", "mood",
+            "tired", "lazy", "sick", "unwell", "hungover", "broke", "poor", "money",
+            "guests", "guest", "hosting", "company", "over", "picky", "fussy", "eaters",
+            "restaurant", "cozy", "craving", "crave", "cravings", "pan", "pans", "pot", "pots",
+            "dish", "dishes", "wash", "washing", "hate", "almost", "barely", "hardly",
+            "nothing", "prep", "prepping", "prepped", "kids", "kid", "children", "work",
+            "packed", "feel", "feeling", "bothered", "effort", "cleanup", "clean-up"
     );
 
     // Intent/preference signals for generic and conversational requests
@@ -111,12 +122,29 @@ public class RetrievalPlanningService {
             Map.entry("vegetarian", Set.of("vegetarian")),
             Map.entry("vegan", Set.of("vegan")),
             Map.entry("low_carb", Set.of("low carb", "low-carb", "keto")),
-            Map.entry("cheap", Set.of("cheap", "budget", "inexpensive", "affordable")),
-            Map.entry("quick", Set.of("quick", "in a hurry", "in a rush")),
-            Map.entry("easy", Set.of("easy", "simple", "beginner")),
-            Map.entry("comfort_food", Set.of("comfort food", "comforting")),
-            Map.entry("family", Set.of("family dinner", "family meal", "family friendly", "family-friendly")),
-            Map.entry("date_night", Set.of("date night")),
+            // Note: keys are matched against the already-normalized message (see normalize()),
+            // which strips apostrophes before this check ever runs - so entries are written
+            // without apostrophes ("im broke", not "i'm broke") to match what's actually compared.
+            Map.entry("cheap", Set.of("cheap", "budget", "inexpensive", "affordable",
+                    "im broke", "no money", "tight budget", "cant afford",
+                    "almost nothing", "barely anything", "hardly anything")),
+            Map.entry("quick", Set.of("quick", "in a hurry", "in a rush", "one pan", "one pot",
+                    "minimal cleanup", "few dishes", "hate doing dishes", "hate washing dishes",
+                    "dont want to wash dishes", "only have one pan", "only one pan")),
+            Map.entry("easy", Set.of("easy", "simple", "beginner", "im tired",
+                    "so tired", "im lazy", "feeling lazy", "dont feel like cooking",
+                    "cant be bothered", "low effort", "no effort")),
+            Map.entry("comfort_food", Set.of("comfort food", "comforting", "im sick",
+                    "not feeling well", "under the weather", "hungover", "something cozy", "cozy")),
+            Map.entry("family", Set.of("family dinner", "family meal", "family friendly", "family-friendly",
+                    "picky kids", "kids are picky", "picky eaters", "fussy kids", "fussy eaters")),
+            // "date_night" is the closest existing occasion bucket in RecipeScoringEngine
+            // (rewards a proper main course or dessert over a snack) - hosting guests wants the
+            // same lift, so it's folded into the same tag rather than inventing a new scoring
+            // dimension for what is, to the ranking engine, the same underlying signal.
+            Map.entry("date_night", Set.of("date night", "cooking for guests", "have guests",
+                    "guests coming", "having people over", "people coming over", "hosting",
+                    "company coming", "impress")),
             Map.entry("spicy", Set.of("spicy"))
     );
 

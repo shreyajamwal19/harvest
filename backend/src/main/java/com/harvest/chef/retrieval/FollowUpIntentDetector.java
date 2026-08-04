@@ -49,14 +49,19 @@ public class FollowUpIntentDetector {
     );
 
     // Phrases that are only coherent as a follow-up adaptation - they already reference "the
-    // thing already shown" grammatically, so no separate backreference check is needed.
+    // thing already shown" grammatically, so no separate backreference check is needed. Bare
+    // "without"/"instead" are included unconditionally (not just "without the"/"instead of the")
+    // to catch shorthand like "without onions" or "with chicken instead" - safe because this
+    // detector is only ever consulted by CompositionService when a prior recipe already exists
+    // in session state (see CompositionService#tryComposeFollowUp), so a fresh first message
+    // that happens to contain "instead" can never be misrouted here.
     private static final List<String> ADAPTATION_PHRASES = List.of(
             "make it", "make this", "double it", "halve it", "double this", "halve this",
             "cook for one", "cook for two", "cook for four", "cook for six", "cook for eight",
-            "cook for ten", "cook for twelve", "without the", "leave out the", "swap the",
-            "substitute the", "instead of the", "replace butter", "replace the",
-            "lower calories", "higher protein", "what if i remove", "what if i dont have",
-            "no onions", "no garlic"
+            "cook for ten", "cook for twelve", "without the", "without", "leave out the",
+            "swap the", "substitute the", "instead of the", "instead", "replace butter",
+            "replace the", "lower calories", "higher protein", "what if i remove",
+            "what if i dont have", "no onions", "no garlic"
     );
 
     // Modifier concepts that only make sense applied to something already on the table -
@@ -68,7 +73,7 @@ public class FollowUpIntentDetector {
             "air fryer", "airfryer", "instant pot", "slow cooker",
             "reduce the calories", "fewer calories", "lower calorie", "healthier",
             "kid friendly", "kid-friendly", "less spicy", "spicier", "spicy",
-            "easier", "simpler", "faster", "quicker"
+            "easier", "simpler", "faster", "quicker", "cheaper", "cheap", "less expensive"
     );
 
     // Phrases only coherent as chef-coaching chat about a recipe already shown.

@@ -33,13 +33,24 @@ public class RecipeExplanationPromptBuilder {
             - You may briefly compare the given recipes and note trade-offs, but a full side-by-side
               comparison request gets its own dedicated response elsewhere - keep this focused on
               recommending and explaining.
-            - If zero recipes are listed below, say so honestly and, if it would genuinely help, ask
-              ONE short clarifying question - never fabricate a recipe to fill the gap.
+            - Optionally, if you genuinely have one, add a single short practical aside a real chef
+              would mention in passing - "this freezes well", "don't rush browning the onions",
+              "prep everything before the pan gets hot". Only when it's specific to this recipe and
+              actually useful, never as a stock line, and never more than one per response.
+            - If zero recipes are listed below, say so honestly. If the request suggests a nearby
+              angle worth trying instead (a related ingredient, an adjacent cuisine, a broader
+              category), name ONE concretely rather than just apologizing - then, if it would
+              genuinely help, ask ONE short clarifying question. Never fabricate a recipe to fill
+              the gap.
             - If recipes ARE listed but the request is genuinely ambiguous (e.g. just one bare
               ingredient with no clear meal type and multiple reasonable interpretations), you may
               ask ONE concise clarifying question as part of your message - but if Harvest already
               has enough to go on, don't interrogate the user, just recommend.
             - Do not mention scores, algorithms, ranking, or the pipeline itself.
+            """
+            + RecipeContextFormatter.VOICE_GUIDANCE
+            + """
+
 
             Respond with ONLY a single JSON object, no prose, no markdown fences, matching exactly:
             {

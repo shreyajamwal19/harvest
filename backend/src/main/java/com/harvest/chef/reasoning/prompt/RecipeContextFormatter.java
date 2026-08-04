@@ -17,6 +17,21 @@ public final class RecipeContextFormatter {
 
     private static final int MAX_RECENT_TURNS = 4;
 
+    /**
+     * Shared "sound like a person, not a template" instruction, appended to every reasoning-mode
+     * system prompt (see each *PromptBuilder) rather than copy-pasted into five of them
+     * separately. "Recent conversation" (appended just below this in every prompt via
+     * {@link #appendRecentTurns}) already includes the assistant's own prior turns, so the model
+     * has what it needs to actually notice and avoid repeating itself - this just tells it to.
+     */
+    public static final String VOICE_GUIDANCE = """
+
+            VARIETY: Check "Recent conversation" below before you answer. If you (the assistant) \
+            already opened a response with a similar phrase this session - "Great choice!", \
+            "Here's why...", "This is a great pick because..." - open differently this time. Don't \
+            restate a recipe's full title or its ingredient list back to the user; they can already \
+            see the recipe card. Lead with the reasoning or the practical detail, not a recap.""";
+
     private RecipeContextFormatter() {
     }
 

@@ -7,10 +7,11 @@ import java.util.Set;
 /**
  * Deterministic, dictionary-based typo tolerance for Retrieval Planning.
  * No ML/LLM involved (the reasoning pipeline is rule-based only) - just a
- * small curated correction map for common misspellings, a hierarchical
- * repeated-character collapse for noisy/emphatic input ("eggggg",
- * "cheeeeeeese"), and a generic edit-distance fallback against a fixed
- * vocabulary of frequent ingredient and control words.
+ * small curated correction map for common misspellings and informal
+ * shorthand, a hierarchical repeated-character collapse for noisy/emphatic
+ * input ("eggggg", "cheeeeeeese"), a generic singular/plural bridge, and a
+ * transposition-aware edit-distance fallback against a fixed vocabulary of
+ * frequent ingredient and control words.
  *
  * Deliberately conservative: the fuzzy fallback only fires for tokens of a
  * reasonable length within a small edit distance, so real (if unusual)
@@ -43,7 +44,22 @@ public final class TypoCorrectionUtil {
             Map.entry("mayonaise", "mayonnaise"),
             Map.entry("spagetti", "spaghetti"),
             Map.entry("veggitable", "vegetable"),
-            Map.entry("vegatable", "vegetable")
+            Map.entry("vegatable", "vegetable"),
+            Map.entry("avacado", "avocado"),
+            Map.entry("avacados", "avocados"),
+            Map.entry("cheeze", "cheese"),
+            Map.entry("spinich", "spinach"),
+            Map.entry("spinnach", "spinach"),
+            Map.entry("yogourt", "yogurt"),
+            Map.entry("yoghurt", "yogurt"),
+            Map.entry("zuchini", "zucchini"),
+            Map.entry("zuchinni", "zucchini"),
+            Map.entry("cauliflour", "cauliflower"),
+            // Informal, unambiguous shorthand worth recognizing directly rather than leaving to
+            // edit-distance guessing (which "chkn" is too short and vowel-less for anyway).
+            Map.entry("chkn", "chicken"),
+            Map.entry("veggies", "vegetables"),
+            Map.entry("veggie", "vegetable")
     );
 
     /**
@@ -62,7 +78,7 @@ public final class TypoCorrectionUtil {
             "chocolate", "vanilla", "cinnamon", "basil", "oregano", "thyme", "ginger",
             "honey", "yogurt", "oil", "salt", "vinegar", "recipe", "recipes",
             "ingredient", "ingredients", "breakfast", "lunch", "dinner", "dessert",
-            "healthy", "quick", "easy", "spicy"
+            "healthy", "quick", "easy", "spicy", "zucchini", "cauliflower"
     );
 
     private TypoCorrectionUtil() {
@@ -115,7 +131,50 @@ public final class TypoCorrectionUtil {
         if (VOCABULARY.contains(word)) {
             return word;
         }
-        return KNOWN_TYPOS.get(word);
+        String known = KNOWN_TYPOS.get(word);
+        if (known != null) {
+            return known;
+        }
+        return pluralBridge(word);
+    }
+
+    /**
+     * Generic singular/plural bridging, tried only after an exact and known-typo match have
+     * both failed. Strips a common plural suffix ("-ies" -> "-y", "-es", "-s") and checks
+     * whether the resulting singular is itself an exact vocabulary word; separately, tries
+     * adding "s" in case the word is a singular form but only the plural is in the vocabulary.
+     * This resolves plural typos not individually hardcoded in {@link #KNOWN_TYPOS} (e.g. a
+     * mistyped "strawberrys") without growing that map indefinitely. Deliberately requires the
+     * bridged form to already be a real vocabulary entry, so it can never invent a match for an
+     * unrelated word - it can only ever collapse two spellings of something already known.
+     */
+    private static String pluralBridge(String word) {
+        if (word.length() < 4) {
+            return null;
+        }
+        if (word.endsWith("ies") && word.length() > 5) {
+            String singular = word.substring(0, word.length() - 3) + "y";
+            if (VOCABULARY.contains(singular)) {
+                return singular;
+            }
+        }
+        if (word.endsWith("es") && word.length() > 4) {
+            String singular = word.substring(0, word.length() - 2);
+            if (VOCABULARY.contains(singular)) {
+                return singular;
+            }
+        }
+        if (word.endsWith("s") && !word.endsWith("ss")) {
+            String singular = word.substring(0, word.length() - 1);
+            if (VOCABULARY.contains(singular)) {
+                return singular;
+            }
+        }
+        String plural = word + "s";
+        if (VOCABULARY.contains(plural)) {
+            return plural;
+        }
+        return null;
     }
 
     /**
@@ -148,7 +207,7 @@ public final class TypoCorrectionUtil {
         String best = null;
         int bestDistance = Integer.MAX_VALUE;
         for (String candidate : VOCABULARY) {
-            int distance = levenshtein(lower, candidate);
+            int distance = restrictedDamerauLevenshtein(lower, candidate);
             if (distance < bestDistance) {
                 bestDistance = distance;
                 best = candidate;
@@ -157,7 +216,17 @@ public final class TypoCorrectionUtil {
         return (best != null && bestDistance <= 2) ? best : lower;
     }
 
-    private static int levenshtein(String a, String b) {
+    /**
+     * Levenshtein distance with one addition: an adjacent-character transposition ("hcicken" vs
+     * "chicken") counts as a single edit instead of two substitutions. This is the "restricted"
+     * (optimal string alignment) variant, not full Damerau-Levenshtein - it doesn't allow a
+     * transposed pair to be edited again afterwards, which is a non-issue at the short word
+     * lengths and distance-2 ceiling this is used at, and keeps the DP simple. The same
+     * distance-2 cutoff as before applies, so this doesn't loosen false-positive risk - it just
+     * scores a genuine one-swap typo the way a person would actually perceive it, freeing that
+     * budget for real length-appropriate matches instead of being consumed by a transposition.
+     */
+    private static int restrictedDamerauLevenshtein(String a, String b) {
         int[][] dp = new int[a.length() + 1][b.length() + 1];
         for (int i = 0; i <= a.length(); i++) {
             dp[i][0] = i;
@@ -168,7 +237,11 @@ public final class TypoCorrectionUtil {
         for (int i = 1; i <= a.length(); i++) {
             for (int j = 1; j <= b.length(); j++) {
                 int cost = a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1;
-                dp[i][j] = Math.min(Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1), dp[i - 1][j - 1] + cost);
+                int value = Math.min(Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1), dp[i - 1][j - 1] + cost);
+                if (i > 1 && j > 1 && a.charAt(i - 1) == b.charAt(j - 2) && a.charAt(i - 2) == b.charAt(j - 1)) {
+                    value = Math.min(value, dp[i - 2][j - 2] + 1);
+                }
+                dp[i][j] = value;
             }
         }
         return dp[a.length()][b.length()];
