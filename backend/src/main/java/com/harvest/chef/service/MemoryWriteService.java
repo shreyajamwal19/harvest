@@ -9,7 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Stage 8 - Memory Write (basic implementation).
+ * Memory Write (basic implementation).
  *
  * Persists the raw user/assistant turn pair so Context Assembly can read it
  * back next time. Deliberately does not extract durable profile facts yet -

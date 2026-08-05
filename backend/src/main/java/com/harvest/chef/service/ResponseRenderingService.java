@@ -4,7 +4,7 @@ import com.harvest.chef.dto.ChatResponse;
 import com.harvest.chef.dto.ChefResponse;
 import org.springframework.stereotype.Service;
 
-/** Stage 7 - Response Rendering. Converts the internal result into the public API DTO. */
+/** Response Rendering - converts the internal result into the public API DTO. */
 @Service
 public class ResponseRenderingService {
 

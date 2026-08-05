@@ -315,7 +315,19 @@ public class RetrievalPlanningService {
         if (cleaned.isEmpty()) {
             return false;
         }
+        // Exact match for the whole (cleaned) message first - covers bare single-word turns
+        // ("more", "another", "next", "others") where a substring check would be dangerously
+        // broad (e.g. "I need another cup of rice" contains "another" but isn't a continuation).
         if (CONTINUATION_PHRASES.contains(cleaned)) {
+            return true;
+        }
+        // Multi-word phrases are distinctive enough to safely substring-match anywhere in the
+        // message, so a real turn with extra words around them - "something else please",
+        // "no, not that one" - is still recognized instead of only the bare phrase matching.
+        boolean matchesDistinctivePhrase = CONTINUATION_PHRASES.stream()
+                .filter(phrase -> phrase.indexOf(' ') >= 0)
+                .anyMatch(cleaned::contains);
+        if (matchesDistinctivePhrase) {
             return true;
         }
         String[] words = cleaned.split(" ");
