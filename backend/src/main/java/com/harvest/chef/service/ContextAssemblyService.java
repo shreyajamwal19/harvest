@@ -7,6 +7,7 @@ import com.harvest.chef.dto.ConversationTurn;
 import com.harvest.chef.dto.RecipeResponse;
 import com.harvest.chef.entity.ConversationMessage;
 import com.harvest.chef.entity.ConversationSession;
+import com.harvest.chef.personalization.service.UserProfileService;
 import com.harvest.chef.repository.ConversationMessageRepository;
 import com.harvest.chef.repository.ConversationSessionRepository;
 import com.harvest.exception.ResourceNotFoundException;
@@ -39,6 +40,7 @@ public class ContextAssemblyService {
     private final ConversationSessionRepository sessionRepository;
     private final ConversationMessageRepository messageRepository;
     private final ObjectMapper objectMapper;
+    private final UserProfileService userProfileService;
 
     @Transactional
     public ConversationContext assemble(Long userId, Long requestedSessionId, String currentMessage) {
@@ -54,6 +56,9 @@ public class ContextAssemblyService {
                 .lastMentionedIngredients(splitCsv(session.getLastMentionedIngredients()))
                 .shownRecipeTitles(splitPipe(session.getShownRecipeTitles()))
                 .lastShownRecipes(deserializeRecipes(session.getLastShownRecipesJson()))
+                // Phase 6A - loaded once per turn; never throws, falls back to an empty
+                // snapshot on any failure so a personalization outage never breaks a turn.
+                .userProfile(userProfileService.loadSnapshot(userId))
                 .build();
     }
 

@@ -2,6 +2,8 @@ package com.harvest.chef.retrieval;
 
 import com.harvest.chef.dto.RecipeCandidate;
 import com.harvest.chef.dto.RetrievalPlan;
+import com.harvest.chef.personalization.dto.UserProfileSnapshot;
+import com.harvest.chef.personalization.entity.PreferenceCategory;
 import com.harvest.chef.retrieval.RecipeCategoryClassifier.Category;
 import com.harvest.chef.util.TypoCorrectionUtil;
 import lombok.RequiredArgsConstructor;
@@ -67,6 +69,13 @@ public class RecipeScoringEngine {
     private static final double WEIGHT_INTENT_ALIGNMENT = 0.15;
     private static final double WEIGHT_POPULARITY = 0.08;
     private static final double WEIGHT_SOURCE = 0.04;
+
+    // Phase 6A - personalization signals. Additive on top of the deterministic base score
+    // above; small weights by design, since the current request always outranks stored
+    // preferences (WEIGHT_INTENT_ALIGNMENT / WEIGHT_INGREDIENT_* stay dominant).
+    private static final double WEIGHT_PERSONALIZATION = 0.10;
+    /** Smart Variety - a soft penalty only, never a hard exclusion. */
+    private static final double WEIGHT_SMART_VARIETY = 0.05;
 
     private static final double INGREDIENT_SIGNAL_BUDGET = WEIGHT_INGREDIENT_MATCH + WEIGHT_PANTRY_UTILIZATION
             + WEIGHT_INGREDIENT_IMPORTANCE + WEIGHT_TITLE_RELEVANCE + WEIGHT_EXACT_MATCH + WEIGHT_COVERAGE_BONUS;
@@ -194,6 +203,130 @@ public class RecipeScoringEngine {
                 pantryUtilizationScore(ingredients, matchedCount), importance, preferenceTags, categories, combinedText);
 
         return new RecipeScore(candidate, total, matchedCount, missing, explanations);
+    }
+
+    // ---------------------------------------------------------------- Phase 6A: personalization
+
+    /**
+     * Backward-compatible overload: identical to {@link #score(RecipeCandidate, RetrievalPlan)}
+     * when {@code profile} is null/empty, and additive otherwise - stored preferences and Smart
+     * Variety only ever nudge the deterministic base score computed above, never replace it, and
+     * the current request's own signals (ingredients, intent tags) always dominate.
+     */
+    public RecipeScore score(RecipeCandidate candidate, RetrievalPlan plan, UserProfileSnapshot profile) {
+        RecipeScore base = score(candidate, plan);
+        if (profile == null || profile.isEmpty()) {
+            return base;
+        }
+
+        double personalization = personalizationScore(candidate, profile);
+        double varietyPenalty = smartVarietyPenalty(candidate, profile);
+        double total = base.total() + WEIGHT_PERSONALIZATION * personalization
+                - WEIGHT_SMART_VARIETY * varietyPenalty;
+
+        List<String> explanations = new ArrayList<>(base.explanations());
+        addPersonalizationExplanations(explanations, candidate, profile);
+
+        return new RecipeScore(candidate, total, base.matchedCount(), base.missingIngredients(), explanations);
+    }
+
+    /**
+     * Averages every stored preference's contribution for this candidate into a single
+     * [-1, 1] signal: favorite ingredients/cuisines the candidate contains push it up
+     * (weighted by how confident that preference is), disliked ingredients and dietary
+     * conflicts push it down. A preference the candidate has no relation to contributes 0,
+     * not a penalty - absence of evidence isn't evidence of a mismatch.
+     */
+    private double personalizationScore(RecipeCandidate candidate, UserProfileSnapshot profile) {
+        String combinedText = combinedLowerText(candidate);
+        List<Double> contributions = new ArrayList<>();
+
+        for (UserProfileSnapshot.PreferenceSignal pref : profile.getPreferences()) {
+            switch (pref.getCategory()) {
+                case FAVORITE_INGREDIENT, FAVORITE_CUISINE, FAVORITE_MEAL_CATEGORY, FAVORITE_COOKING_METHOD -> {
+                    if (containsAsWord(combinedText, pref.getValue())) {
+                        contributions.add(pref.getConfidence());
+                    }
+                }
+                case DISLIKED_INGREDIENT -> {
+                    if (containsAsWord(combinedText, pref.getValue())) {
+                        contributions.add(-pref.getConfidence());
+                    }
+                }
+                case DIETARY_RESTRICTION -> {
+                    Double conflict = dietaryConflictPenalty(pref.getValue(), combinedText);
+                    if (conflict != null) {
+                        contributions.add(-pref.getConfidence() * conflict);
+                    }
+                }
+                default -> {
+                    // COOKING_SKILL / PREFERRED_COOKING_DURATION / PREFERRED_SERVING_SIZE /
+                    // HEALTH_GOAL / FAVORITE_APPLIANCE aren't derivable from candidate text alone
+                    // with what RecipeCandidate carries today - left for a future refinement
+                    // rather than guessed at.
+                }
+            }
+        }
+
+        if (contributions.isEmpty()) {
+            return 0.0;
+        }
+        double avg = contributions.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
+        return Math.max(-1.0, Math.min(1.0, avg));
+    }
+
+    /** Returns 1.0 (hard conflict), a partial value, or null (no conflict / not a recognized diet). */
+    private Double dietaryConflictPenalty(String diet, String combinedText) {
+        return switch (diet) {
+            case "vegetarian" -> containsAny(combinedText, MEAT_FISH_KEYWORDS) ? 1.0 : null;
+            case "vegan" -> (containsAny(combinedText, MEAT_FISH_KEYWORDS)
+                    || containsAny(combinedText, ANIMAL_PRODUCT_KEYWORDS)) ? 1.0 : null;
+            case "pescatarian" -> containsAny(combinedText, Set.of("chicken", "beef", "pork", "bacon", "sausage",
+                    "ham", "lamb", "turkey")) ? 1.0 : null;
+            default -> null; // gluten-free/dairy-free/keto/halal/kosher: not reliably derivable from free-text
+                              // ingredient lines without a structured allergen model - deferred rather than guessed.
+        };
+    }
+
+    /**
+     * Smart Variety: a soft, purely additive penalty for recipes the user has been shown
+     * recently, so the same handful of dishes don't dominate every recommendation. Never an
+     * exclusion - {@code profile.getRecentRecipeTitles()} only informs ranking, and an
+     * explicit request (the current message's own ingredients/intent tags) is unaffected by it.
+     */
+    private double smartVarietyPenalty(RecipeCandidate candidate, UserProfileSnapshot profile) {
+        List<String> recent = profile.getRecentRecipeTitles();
+        if (recent == null || recent.isEmpty() || candidate.getTitle() == null) {
+            return 0.0;
+        }
+        String normalizedTitle = candidate.getTitle().trim().toLowerCase(Locale.ROOT);
+        int index = recent.indexOf(normalizedTitle);
+        if (index < 0) {
+            return 0.0;
+        }
+        if (index == 0) {
+            return 1.0;
+        }
+        if (index <= 2) {
+            return 0.6;
+        }
+        return 0.3;
+    }
+
+    private void addPersonalizationExplanations(List<String> explanations, RecipeCandidate candidate,
+                                                 UserProfileSnapshot profile) {
+        String combinedText = combinedLowerText(candidate);
+        for (UserProfileSnapshot.PreferenceSignal pref : profile.getPreferences()) {
+            if (pref.getConfidence() < 0.6) {
+                continue;
+            }
+            boolean favorite = pref.getCategory() == PreferenceCategory.FAVORITE_INGREDIENT
+                    || pref.getCategory() == PreferenceCategory.FAVORITE_CUISINE;
+            if (favorite && containsAsWord(combinedText, pref.getValue())) {
+                explanations.add("Matches something you like: " + pref.getValue() + ".");
+                break; // one personalization callout is plenty - avoid a wall of explanations
+            }
+        }
     }
 
     // ---------------------------------------------------------------- ingredient match

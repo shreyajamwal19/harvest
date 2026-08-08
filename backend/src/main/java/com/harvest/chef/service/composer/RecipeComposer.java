@@ -8,6 +8,7 @@ import com.harvest.chef.dto.RecipeCandidate;
 import com.harvest.chef.dto.RecipeResponse;
 import com.harvest.chef.dto.RetrievalBundle;
 import com.harvest.chef.dto.RetrievalPlan;
+import com.harvest.chef.personalization.service.CookingHistoryService;
 import com.harvest.chef.reasoning.ChefReasoningResult;
 import com.harvest.chef.reasoning.ChefReasoningService;
 import com.harvest.chef.retrieval.RecipeEvaluationService;
@@ -49,6 +50,7 @@ public class RecipeComposer implements ResponseComposer {
     private final RecipeGenerationService recipeGenerationService;
     private final SessionStateService sessionStateService;
     private final ChefReasoningService chefReasoningService;
+    private final CookingHistoryService cookingHistoryService;
 
     @Override
     public ChefResponse compose(ConversationContext context, RetrievalPlan plan) {
@@ -80,6 +82,12 @@ public class RecipeComposer implements ResponseComposer {
                 .orElse(ChefResponseType.RECIPE);
 
         sessionStateService.updateAfterRecipeTurn(context.getSessionId(), plan, recipes);
+
+        if (responseType == ChefResponseType.RECIPE) {
+            // Phase 6A - feeds Smart Variety on future turns. Never blocks or fails this
+            // response; CookingHistoryService swallows its own errors.
+            cookingHistoryService.recordShown(context.getUserId(), recipes);
+        }
 
         return ChefResponse.builder()
                 .type(responseType)

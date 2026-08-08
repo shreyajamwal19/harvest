@@ -9,5 +9,7 @@ public enum ChefResponseType {
     RECIPE,
     TECHNIQUE_ANSWER,
     CLARIFYING_QUESTION,
-    HONEST_NON_ANSWER
+    HONEST_NON_ANSWER,
+    /** Phase 6A - a deterministic memory-command turn (remember/forget/show/reset/...). */
+    PROFILE_UPDATE
 }

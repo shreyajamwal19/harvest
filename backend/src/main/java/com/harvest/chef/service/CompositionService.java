@@ -5,6 +5,12 @@ import com.harvest.chef.dto.ChefResponseType;
 import com.harvest.chef.dto.ConversationContext;
 import com.harvest.chef.dto.RecipeResponse;
 import com.harvest.chef.dto.RetrievalPlan;
+import com.harvest.chef.personalization.service.MemoryCommandDetector;
+import com.harvest.chef.personalization.service.MemoryCommandDetector.MemoryCommand;
+import com.harvest.chef.personalization.service.MemoryCommandService;
+import com.harvest.chef.personalization.service.PreferenceLearningService;
+import com.harvest.chef.personalization.service.PreferenceLearningService.LearnedPreference;
+import com.harvest.chef.personalization.service.UserProfileService;
 import com.harvest.chef.reasoning.ChefReasoningResult;
 import com.harvest.chef.reasoning.ChefReasoningService;
 import com.harvest.chef.reasoning.ReasoningMode;
@@ -45,8 +51,20 @@ public class CompositionService {
     private final RetrievalPlanningService retrievalPlanningService;
     private final RecipeComposer recipeComposer;
     private final TechniqueAnswerComposer techniqueAnswerComposer;
+    private final MemoryCommandDetector memoryCommandDetector;
+    private final MemoryCommandService memoryCommandService;
+    private final PreferenceLearningService preferenceLearningService;
+    private final UserProfileService userProfileService;
 
     public ChefResponse compose(ConversationContext context) {
+        // Phase 6A - deterministic memory commands ("remember I like...", "show my
+        // preferences", "reset my profile", ...) take absolute priority: no LLM, no
+        // retrieval, no risk of a profile question accidentally becoming a recipe search.
+        Optional<MemoryCommand> command = memoryCommandDetector.detect(context.getCurrentMessage());
+        if (command.isPresent()) {
+            return memoryCommandService.execute(context.getUserId(), command.get());
+        }
+
         Optional<ChefResponse> followUp = tryComposeFollowUp(context);
         if (followUp.isPresent()) {
             return followUp.get();
@@ -54,10 +72,38 @@ public class CompositionService {
 
         RetrievalPlan plan = retrievalPlanningService.plan(context);
 
-        return switch (plan.getIntent()) {
+        ChefResponse response = switch (plan.getIntent()) {
             case TECHNIQUE -> techniqueAnswerComposer.compose(context, plan);
             case RECIPE -> recipeComposer.compose(context, plan);
         };
+
+        return acknowledgeAnyLearnedPreferences(context, response);
+    }
+
+    /**
+     * Passive/explicit preference learning from ordinary conversation (not a memory command) -
+     * "I love spicy food", "I'm vegetarian", etc. Runs after composition so the normal
+     * recipe/technique response is never delayed or altered by it; if anything was learned, a
+     * short natural acknowledgment is appended to the message that's already been composed.
+     */
+    private ChefResponse acknowledgeAnyLearnedPreferences(ConversationContext context, ChefResponse response) {
+        List<LearnedPreference> learned = preferenceLearningService
+                .learnFromMessage(userProfileService, context.getUserId(), context.getCurrentMessage());
+        if (learned.isEmpty()) {
+            return response;
+        }
+
+        String acknowledgment = learned.stream()
+                .map(lp -> lp.positive() ? "you like " + lp.value() : "you don't like " + lp.value())
+                .reduce((a, b) -> a + " and " + b)
+                .map(s -> "Noted that " + s + ".")
+                .orElse("");
+
+        return ChefResponse.builder()
+                .type(response.getType())
+                .message(response.getMessage() + " " + acknowledgment)
+                .recipes(response.getRecipes())
+                .build();
     }
 
     /**

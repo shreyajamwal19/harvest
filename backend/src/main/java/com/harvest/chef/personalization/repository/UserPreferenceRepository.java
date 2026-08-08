@@ -1,0 +1,28 @@
+package com.harvest.chef.personalization.repository;
+
+import com.harvest.chef.personalization.entity.PreferenceCategory;
+import com.harvest.chef.personalization.entity.UserPreference;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.Optional;
+
+@Repository
+public interface UserPreferenceRepository extends JpaRepository<UserPreference, Long> {
+
+    List<UserPreference> findByUserIdOrderByConfidenceDesc(Long userId);
+
+    Optional<UserPreference> findByUserIdAndCategoryAndValue(Long userId, PreferenceCategory category, String value);
+
+    @Modifying
+    @Query("DELETE FROM UserPreference p WHERE p.userId = :userId AND LOWER(p.value) LIKE LOWER(CONCAT('%', :value, '%'))")
+    int deleteByUserIdAndValueContaining(@Param("userId") Long userId, @Param("value") String value);
+
+    @Modifying
+    @Query("DELETE FROM UserPreference p WHERE p.userId = :userId")
+    int deleteAllByUserId(@Param("userId") Long userId);
+}

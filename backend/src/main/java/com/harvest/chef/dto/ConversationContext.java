@@ -1,5 +1,6 @@
 package com.harvest.chef.dto;
 
+import com.harvest.chef.personalization.dto.UserProfileSnapshot;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -26,4 +27,11 @@ public class ConversationContext {
      * handling ("make it vegetarian", "double it") without a fresh retrieval.
      */
     private List<RecipeResponse> lastShownRecipes;
+    /**
+     * Phase 6A - read-only snapshot of what the personalization engine currently
+     * believes about this user (preferences + recent recipe history). Always
+     * non-null - {@code UserProfileSnapshot.empty()} when nothing is known yet or
+     * profile data couldn't be loaded, so downstream code never has to null-check it.
+     */
+    private UserProfileSnapshot userProfile;
 }

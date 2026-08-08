@@ -64,7 +64,7 @@ public class RecipeEvaluationService {
             if (excluded.contains(normalizeTitle(candidate.getTitle()))) {
                 continue;
             }
-            scored.add(scoringEngine.score(candidate, plan));
+            scored.add(scoringEngine.score(candidate, plan, context.getUserProfile()));
         }
 
         scored.sort(Comparator

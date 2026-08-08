@@ -1,0 +1,162 @@
+package com.harvest.chef.personalization.service;
+
+import com.harvest.chef.personalization.dto.UserProfileSnapshot;
+import com.harvest.chef.personalization.entity.PreferenceCategory;
+import com.harvest.chef.personalization.entity.PreferenceSource;
+import com.harvest.chef.personalization.entity.RecipeHistoryEntry;
+import com.harvest.chef.personalization.entity.UserPreference;
+import com.harvest.chef.personalization.repository.RecipeHistoryRepository;
+import com.harvest.chef.personalization.repository.UserPreferenceRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.Locale;
+
+/**
+ * Owns the deterministic user profile: loading a read-only snapshot for a
+ * turn, and blending new signals into stored preferences via a slow
+ * exponential moving average so confidence never jumps on a single
+ * ambiguous data point. This is the ONLY place preference confidence math
+ * happens - {@code PreferenceLearningService} and {@code CookingHistoryService}
+ * both funnel through here rather than writing confidence values themselves.
+ */
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class UserProfileService {
+
+    /** How much a single new signal moves confidence toward its target. Deliberately small. */
+    private static final double LEARNING_RATE = 0.1;
+    private static final double EXPLICIT_TARGET_POSITIVE = 0.95;
+    private static final double INFERRED_TARGET_POSITIVE = 0.75;
+    private static final double MIN_CONFIDENCE = 0.05;
+    private static final double MAX_CONFIDENCE = 0.99;
+    private static final int RECENT_HISTORY_LIMIT = 20;
+
+    private final UserPreferenceRepository preferenceRepository;
+    private final RecipeHistoryRepository historyRepository;
+
+    /**
+     * Never throws - a personalization outage must never break recipe
+     * recommendations. On any failure this returns an empty snapshot and
+     * the rest of the pipeline behaves exactly as it did before Phase 6A.
+     */
+    public UserProfileSnapshot loadSnapshot(Long userId) {
+        if (userId == null) {
+            return UserProfileSnapshot.empty(null);
+        }
+        try {
+            List<UserPreference> preferences = preferenceRepository.findByUserIdOrderByConfidenceDesc(userId);
+            List<RecipeHistoryEntry> history = historyRepository.findTop50ByUserIdOrderByCreatedAtDesc(userId);
+
+            List<UserProfileSnapshot.PreferenceSignal> signals = preferences.stream()
+                    .map(p -> UserProfileSnapshot.PreferenceSignal.builder()
+                            .category(p.getCategory())
+                            .value(p.getValue())
+                            .confidence(p.getConfidence())
+                            .source(p.getSource().name())
+                            .build())
+                    .toList();
+
+            List<String> recentTitles = history.stream()
+                    .map(RecipeHistoryEntry::getRecipeTitle)
+                    .distinct()
+                    .limit(RECENT_HISTORY_LIMIT)
+                    .toList();
+
+            log.info("[personalization] profile read userId={} preferences={} recentTitles={}",
+                    userId, signals.size(), recentTitles.size());
+
+            return UserProfileSnapshot.builder()
+                    .userId(userId)
+                    .preferences(signals)
+                    .recentRecipeTitles(recentTitles)
+                    .build();
+        } catch (Exception e) {
+            log.warn("[personalization] failed to load profile for userId={} - continuing without it: {}",
+                    userId, e.getMessage());
+            return UserProfileSnapshot.empty(userId);
+        }
+    }
+
+    /**
+     * Blends a new positive signal for (category, value) into the stored
+     * preference. EXPLICIT statements pull confidence toward a high target
+     * fast-ish (still EMA, never an instant jump to 1.0); INFERRED signals
+     * pull toward a lower target, slowly.
+     */
+    @Transactional
+    public void reinforce(Long userId, PreferenceCategory category, String value, PreferenceSource source) {
+        upsert(userId, category, value, source,
+                source == PreferenceSource.EXPLICIT ? EXPLICIT_TARGET_POSITIVE : INFERRED_TARGET_POSITIVE);
+    }
+
+    /** Blends a negative/contradicting signal - confidence decays toward zero, never deleted outright. */
+    @Transactional
+    public void weaken(Long userId, PreferenceCategory category, String value, PreferenceSource source) {
+        upsert(userId, category, value, source, 0.0);
+    }
+
+    private void upsert(Long userId, PreferenceCategory category, String value, PreferenceSource source,
+                         double target) {
+        if (userId == null || category == null || value == null || value.isBlank()) {
+            return;
+        }
+        String normalized = value.trim().toLowerCase(Locale.ROOT);
+
+        UserPreference preference = preferenceRepository
+                .findByUserIdAndCategoryAndValue(userId, category, normalized)
+                .orElseGet(() -> UserPreference.builder()
+                        .userId(userId)
+                        .category(category)
+                        .value(normalized)
+                        .confidence(0.5)
+                        .source(source)
+                        .build());
+
+        double previous = preference.getConfidence();
+        double blended = previous + LEARNING_RATE * (target - previous);
+        blended = Math.max(MIN_CONFIDENCE, Math.min(MAX_CONFIDENCE, blended));
+
+        preference.setConfidence(blended);
+        // An explicit statement always upgrades the recorded source; an inferred signal never
+        // downgrades an already-explicit preference.
+        if (source == PreferenceSource.EXPLICIT) {
+            preference.setSource(PreferenceSource.EXPLICIT);
+        }
+        preferenceRepository.save(preference);
+
+        log.info("[personalization] preference updated userId={} category={} value='{}' {}->{} source={}",
+                userId, category, normalized, round(previous), round(blended), preference.getSource());
+    }
+
+    @Transactional
+    public int forget(Long userId, String valueFragment) {
+        if (userId == null || valueFragment == null || valueFragment.isBlank()) {
+            return 0;
+        }
+        int removed = preferenceRepository.deleteByUserIdAndValueContaining(userId,
+                valueFragment.trim().toLowerCase(Locale.ROOT));
+        log.info("[personalization] forget userId={} fragment='{}' removed={}", userId, valueFragment, removed);
+        return removed;
+    }
+
+    @Transactional
+    public void resetProfile(Long userId) {
+        int removed = preferenceRepository.deleteAllByUserId(userId);
+        log.info("[personalization] profile reset userId={} preferencesRemoved={}", userId, removed);
+    }
+
+    @Transactional
+    public void clearHistory(Long userId) {
+        int removed = historyRepository.deleteAllByUserId(userId);
+        log.info("[personalization] history cleared userId={} entriesRemoved={}", userId, removed);
+    }
+
+    private double round(double value) {
+        return Math.round(value * 100.0) / 100.0;
+    }
+}
