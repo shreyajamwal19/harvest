@@ -5,12 +5,23 @@ import com.harvest.chef.dto.ChefResponseType;
 import com.harvest.chef.dto.ConversationContext;
 import com.harvest.chef.dto.RecipeResponse;
 import com.harvest.chef.dto.RetrievalPlan;
+import com.harvest.chef.pantry.dto.PantrySnapshot;
+import com.harvest.chef.pantry.service.PantryCommandDetector;
+import com.harvest.chef.pantry.service.PantryCommandDetector.PantryCommand;
+import com.harvest.chef.pantry.service.PantryCommandService;
 import com.harvest.chef.personalization.service.MemoryCommandDetector;
 import com.harvest.chef.personalization.service.MemoryCommandDetector.MemoryCommand;
 import com.harvest.chef.personalization.service.MemoryCommandService;
 import com.harvest.chef.personalization.service.PreferenceLearningService;
 import com.harvest.chef.personalization.service.PreferenceLearningService.LearnedPreference;
 import com.harvest.chef.personalization.service.UserProfileService;
+import com.harvest.chef.planning.dto.MealPlanResponse;
+import com.harvest.chef.planning.dto.ShoppingListResponse;
+import com.harvest.chef.planning.service.MealPlanRequestDetector;
+import com.harvest.chef.planning.service.MealPlanRequestDetector.MealPlanRequest;
+import com.harvest.chef.planning.service.MealPlanningService;
+import com.harvest.chef.planning.service.ShoppingListRequestDetector;
+import com.harvest.chef.planning.service.ShoppingListService;
 import com.harvest.chef.reasoning.ChefReasoningResult;
 import com.harvest.chef.reasoning.ChefReasoningService;
 import com.harvest.chef.reasoning.ReasoningMode;
@@ -55,6 +66,12 @@ public class CompositionService {
     private final MemoryCommandService memoryCommandService;
     private final PreferenceLearningService preferenceLearningService;
     private final UserProfileService userProfileService;
+    private final PantryCommandDetector pantryCommandDetector;
+    private final PantryCommandService pantryCommandService;
+    private final MealPlanRequestDetector mealPlanRequestDetector;
+    private final MealPlanningService mealPlanningService;
+    private final ShoppingListRequestDetector shoppingListRequestDetector;
+    private final ShoppingListService shoppingListService;
 
     public ChefResponse compose(ConversationContext context) {
         // Phase 6A - deterministic memory commands ("remember I like...", "show my
@@ -63,6 +80,25 @@ public class CompositionService {
         Optional<MemoryCommand> command = memoryCommandDetector.detect(context.getCurrentMessage());
         if (command.isPresent()) {
             return memoryCommandService.execute(context.getUserId(), command.get());
+        }
+
+        // Phase 6B - deterministic pantry commands ("I bought eggs", "remove onions", "show my
+        // pantry", ...), same priority reasoning: never let a pantry update accidentally become
+        // a recipe search.
+        Optional<PantryCommand> pantryCommand = pantryCommandDetector.detect(context.getCurrentMessage());
+        if (pantryCommand.isPresent()) {
+            return pantryCommandService.execute(context.getUserId(), pantryCommand.get());
+        }
+
+        // Phase 6B - meal-plan and shopping-list requests are also deterministic (the engine
+        // chooses every recipe / every list item, never the LLM) and checked before normal
+        // retrieval so they can't be misrouted into an ordinary recipe search.
+        Optional<MealPlanRequest> mealPlanRequest = mealPlanRequestDetector.detect(context.getCurrentMessage());
+        if (mealPlanRequest.isPresent()) {
+            return composeMealPlan(context, mealPlanRequest.get());
+        }
+        if (shoppingListRequestDetector.detect(context.getCurrentMessage())) {
+            return composeShoppingList(context);
         }
 
         Optional<ChefResponse> followUp = tryComposeFollowUp(context);
@@ -78,6 +114,65 @@ public class CompositionService {
         };
 
         return acknowledgeAnyLearnedPreferences(context, response);
+    }
+
+    /** MEAL_PLANNING - the deterministic engine chooses every day's recipe; see MealPlanningService. */
+    private ChefResponse composeMealPlan(ConversationContext context, MealPlanRequest request) {
+        MealPlanResponse plan = mealPlanningService.generate(context, request.days(), request.mealType());
+
+        if (plan.getDays().isEmpty()) {
+            return ChefResponse.builder()
+                    .type(ChefResponseType.MEAL_PLAN)
+                    .message("I couldn't put together a meal plan from what's available right now.")
+                    .mealPlan(plan)
+                    .build();
+        }
+
+        String summary = plan.getDays().stream()
+                .map(day -> day.getDayLabel() + ": " + day.getRecipe().getTitle())
+                .reduce((a, b) -> a + "\n" + b)
+                .orElse("");
+        String message = "Here's a " + plan.getDays().size() + "-day plan:\n" + summary;
+
+        return ChefResponse.builder()
+                .type(ChefResponseType.MEAL_PLAN)
+                .message(message)
+                .mealPlan(plan)
+                .build();
+    }
+
+    /** SHOPPING_LISTS - built from whatever recipes were most recently shown (search or meal plan). */
+    private ChefResponse composeShoppingList(ConversationContext context) {
+        List<RecipeResponse> source = context.getLastShownRecipes();
+        if (source == null || source.isEmpty()) {
+            return ChefResponse.builder()
+                    .type(ChefResponseType.SHOPPING_LIST)
+                    .message("I don't have any recipes to shop for yet - ask me for a recipe or a "
+                            + "meal plan first, then I can generate a grocery list from it.")
+                    .build();
+        }
+
+        PantrySnapshot pantry = context.getPantry();
+        ShoppingListResponse list = shoppingListService.generate(source, pantry);
+
+        if (list.getCategories().isEmpty()) {
+            return ChefResponse.builder()
+                    .type(ChefResponseType.SHOPPING_LIST)
+                    .message("Looks like your pantry already covers everything for what's been suggested "
+                            + "- nothing to buy!")
+                    .shoppingList(list)
+                    .build();
+        }
+
+        String summary = list.getCategories().stream()
+                .map(c -> c.getCategory() + ": " + String.join(", ", c.getItems()))
+                .reduce((a, b) -> a + "\n" + b)
+                .orElse("");
+        return ChefResponse.builder()
+                .type(ChefResponseType.SHOPPING_LIST)
+                .message("Here's your grocery list:\n" + summary)
+                .shoppingList(list)
+                .build();
     }
 
     /**

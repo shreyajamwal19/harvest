@@ -11,5 +11,11 @@ public enum ChefResponseType {
     CLARIFYING_QUESTION,
     HONEST_NON_ANSWER,
     /** Phase 6A - a deterministic memory-command turn (remember/forget/show/reset/...). */
-    PROFILE_UPDATE
+    PROFILE_UPDATE,
+    /** Phase 6B - a deterministic pantry-command turn (add/remove/consume/show/clear). */
+    PANTRY_UPDATE,
+    /** Phase 6B - a deterministically generated multi-day meal plan. */
+    MEAL_PLAN,
+    /** Phase 6B - a deterministically generated, pantry-subtracted grocery list. */
+    SHOPPING_LIST
 }

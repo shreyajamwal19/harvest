@@ -1,5 +1,6 @@
 package com.harvest.chef.dto;
 
+import com.harvest.chef.pantry.dto.PantrySnapshot;
 import com.harvest.chef.personalization.dto.UserProfileSnapshot;
 import lombok.Builder;
 import lombok.Getter;
@@ -34,4 +35,10 @@ public class ConversationContext {
      * profile data couldn't be loaded, so downstream code never has to null-check it.
      */
     private UserProfileSnapshot userProfile;
+    /**
+     * Phase 6B - read-only snapshot of the user's pantry, loaded once per turn the same
+     * way {@link #userProfile} is. Always non-null - {@code PantrySnapshot.empty()} when
+     * nothing is stored yet or pantry data couldn't be loaded.
+     */
+    private PantrySnapshot pantry;
 }

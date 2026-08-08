@@ -2,6 +2,7 @@ package com.harvest.chef.retrieval;
 
 import com.harvest.chef.dto.RecipeCandidate;
 import com.harvest.chef.dto.RetrievalPlan;
+import com.harvest.chef.pantry.dto.PantrySnapshot;
 import com.harvest.chef.personalization.dto.UserProfileSnapshot;
 import com.harvest.chef.personalization.entity.PreferenceCategory;
 import com.harvest.chef.retrieval.RecipeCategoryClassifier.Category;
@@ -18,6 +19,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * Phase 4B/4C - multi-factor recipe scoring, ranking, and result
@@ -76,6 +78,11 @@ public class RecipeScoringEngine {
     private static final double WEIGHT_PERSONALIZATION = 0.10;
     /** Smart Variety - a soft penalty only, never a hard exclusion. */
     private static final double WEIGHT_SMART_VARIETY = 0.05;
+
+    // Phase 6B - pantry-awareness signals. Same additive philosophy: small weights, the
+    // current request's own ingredient/intent signals always dominate.
+    private static final double WEIGHT_PANTRY_COVERAGE = 0.08;
+    private static final double WEIGHT_EXPIRY_USAGE = 0.10;
 
     private static final double INGREDIENT_SIGNAL_BUDGET = WEIGHT_INGREDIENT_MATCH + WEIGHT_PANTRY_UTILIZATION
             + WEIGHT_INGREDIENT_IMPORTANCE + WEIGHT_TITLE_RELEVANCE + WEIGHT_EXACT_MATCH + WEIGHT_COVERAGE_BONUS;
@@ -226,6 +233,48 @@ public class RecipeScoringEngine {
 
         List<String> explanations = new ArrayList<>(base.explanations());
         addPersonalizationExplanations(explanations, candidate, profile);
+
+        return new RecipeScore(candidate, total, base.matchedCount(), base.missingIngredients(), explanations);
+    }
+
+    /**
+     * Phase 6B: identical to {@link #score(RecipeCandidate, RetrievalPlan, UserProfileSnapshot)}
+     * when {@code pantry} is null/empty, and additive otherwise - pantry coverage and expiry
+     * usage only ever nudge the score, never override the current request's own ingredient/
+     * intent signals, which stay dominant via the much larger ingredient-match weights above.
+     */
+    public RecipeScore score(RecipeCandidate candidate, RetrievalPlan plan, UserProfileSnapshot profile,
+                              PantrySnapshot pantry) {
+        RecipeScore base = score(candidate, plan, profile);
+        if (pantry == null || pantry.isEmpty() || candidate.getIngredients() == null) {
+            return base;
+        }
+
+        List<String> pantryNames = pantry.ingredientNames();
+        String combinedText = combinedLowerText(candidate);
+
+        long ownedCount = candidate.getIngredients().stream()
+                .filter(line -> pantryNames.stream().anyMatch(p -> containsAsWord(line.toLowerCase(Locale.ROOT), p)))
+                .count();
+        double coverage = candidate.getIngredients().isEmpty() ? 0.0
+                : (double) ownedCount / candidate.getIngredients().size();
+
+        List<PantrySnapshot.Item> expiringUsed = pantry.getItems().stream()
+                .filter(PantrySnapshot.Item::isExpiringSoon)
+                .filter(item -> containsAsWord(combinedText, item.getIngredientName()))
+                .toList();
+
+        double total = base.total() + WEIGHT_PANTRY_COVERAGE * coverage
+                + (expiringUsed.isEmpty() ? 0.0 : WEIGHT_EXPIRY_USAGE);
+
+        List<String> explanations = new ArrayList<>(base.explanations());
+        if (!expiringUsed.isEmpty()) {
+            String names = expiringUsed.stream().map(PantrySnapshot.Item::getIngredientName)
+                    .collect(Collectors.joining(", "));
+            explanations.add("Uses " + names + " before it expires.");
+        } else if (coverage >= 0.7) {
+            explanations.add("You already have most of what this needs.");
+        }
 
         return new RecipeScore(candidate, total, base.matchedCount(), base.missingIngredients(), explanations);
     }

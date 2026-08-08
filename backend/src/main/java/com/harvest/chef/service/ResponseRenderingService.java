@@ -14,6 +14,8 @@ public class ResponseRenderingService {
                 .responseType(chefResponse.getType())
                 .message(chefResponse.getMessage())
                 .recipes(chefResponse.getRecipes())
+                .mealPlan(chefResponse.getMealPlan())
+                .shoppingList(chefResponse.getShoppingList())
                 .build();
     }
 }
