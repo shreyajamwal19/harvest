@@ -217,7 +217,6 @@ public class RetrievalPlanningService {
         boolean isTechnique = TECHNIQUE_KEYWORDS.stream().anyMatch(lower::contains);
         Set<String> synonymResolved = new LinkedHashSet<>();
         List<String> ingredients = extractIngredientsWithSynonymTracking(lower, synonymResolved);
-        Set<String> preferenceTags = detectPreferenceTags(lower);
 
         // Phase 7 - "no mushrooms" / "without cheese" must never become a positive mentioned
         // ingredient (the opposite of what the user asked for). Detected on the raw message
@@ -230,6 +229,14 @@ public class RetrievalPlanningService {
                     .filter(ingredient -> excludedIngredients.stream().noneMatch(excluded -> isWordIn(ingredient, excluded)))
                     .toList();
         }
+
+        // Preference-tag phrase matching runs on a negation-stripped copy of the message, not
+        // the raw `lower` - otherwise "not spicy" would still register the positive "spicy"
+        // tag (the word is still sitting right there in the string) at the exact moment the
+        // user asked to exclude it. This is what "not" as a constraint rather than an
+        // ingredient means in practice: it has to suppress the positive signal too, not just
+        // add a separate negative one.
+        Set<String> preferenceTags = detectPreferenceTags(negationDetector.stripNegatedSpans(message));
 
         boolean needsExternalRecipes = ingredients.isEmpty();
         boolean needsNutritionGrounding = NUTRITION_KEYWORDS.stream().anyMatch(lower::contains);

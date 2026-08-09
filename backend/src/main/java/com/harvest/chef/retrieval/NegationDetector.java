@@ -67,6 +67,27 @@ public class NegationDetector {
         return excluded;
     }
 
+    /**
+     * Returns the message with every negation phrase's matched span removed entirely (not
+     * just the leading "no"/"not"/"without" word). Intended for callers that detect POSITIVE
+     * keyword signals from raw text (e.g. preference-tag phrase matching) - without this, "not
+     * spicy" would still register a positive "spicy" signal downstream, because the word
+     * "spicy" is still sitting right there in the string even though the user just excluded it.
+     * Stripping the whole matched phrase, not just the negation word, is what makes this
+     * general rather than a fix for one specific tag: any future keyword-phrase whose trigger
+     * word happens to also be a negatable food term is protected the same way automatically.
+     */
+    public String stripNegatedSpans(String message) {
+        if (message == null || message.isBlank()) {
+            return "";
+        }
+        String lower = " " + message.toLowerCase(Locale.ROOT).replace("'", "") + " ";
+        for (Pattern pattern : NEGATION_PATTERNS) {
+            lower = pattern.matcher(lower).replaceAll(" ");
+        }
+        return lower.trim();
+    }
+
     /** Strips trailing filler words and caps the phrase to a short, ingredient-shaped length. */
     private String cleanTerm(String rawCapture) {
         String[] words = rawCapture.trim().split("\\s+");

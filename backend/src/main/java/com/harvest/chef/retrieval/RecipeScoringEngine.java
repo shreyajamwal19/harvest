@@ -163,6 +163,17 @@ public class RecipeScoringEngine {
             "habanero", "spicy", "curry", "szechuan", "pepper flakes", "hot pepper"
     );
 
+    // Excluded "trait" terms (e.g. "spicy" from "not spicy") that have an existing keyword-set
+    // definition elsewhere in this engine get checked against that richer vocabulary instead of
+    // the bare literal word - a recipe almost never spells out the word "spicy" itself, it just
+    // contains cayenne/jalapeño/hot sauce/etc. Reuses the same keyword set the positive "spicy"
+    // preference tag already scores against (see dietaryAlignment) rather than a second,
+    // separately-maintained list, and this map is where any future trait-word/keyword-set pair
+    // would be added, so the exclusion path automatically benefits the same way.
+    private static final Map<String, Set<String>> EXCLUDABLE_TRAIT_KEYWORDS = Map.of(
+            "spicy", SPICY_KEYWORDS
+    );
+
     private final RecipeCategoryClassifier categoryClassifier;
 
     /** Full scoring breakdown for one candidate against one request. */
@@ -248,8 +259,22 @@ public class RecipeScoringEngine {
         if (excludedIngredients == null || excludedIngredients.isEmpty()) {
             return 0.0;
         }
-        long hits = excludedIngredients.stream().filter(term -> containsAsWord(combinedText, term)).count();
+        long hits = excludedIngredients.stream().filter(term -> matchesExcludedTerm(combinedText, term)).count();
         return hits == 0 ? 0.0 : Math.min(1.0, 0.7 + 0.15 * (hits - 1));
+    }
+
+    /**
+     * A literal excluded ingredient ("mushrooms") is checked as a whole word, same as ever.
+     * An excluded trait word that maps to a broader keyword vocabulary elsewhere in this engine
+     * ("spicy") is checked against that whole vocabulary instead, since the literal word is
+     * rarely what actually appears in a recipe's title or ingredient list.
+     */
+    private boolean matchesExcludedTerm(String combinedText, String term) {
+        Set<String> traitKeywords = EXCLUDABLE_TRAIT_KEYWORDS.get(term);
+        if (traitKeywords != null) {
+            return containsAny(combinedText, traitKeywords);
+        }
+        return containsAsWord(combinedText, term);
     }
 
     // ---------------------------------------------------------------- Phase 6A: personalization
