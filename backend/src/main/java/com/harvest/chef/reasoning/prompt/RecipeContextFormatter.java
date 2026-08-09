@@ -69,6 +69,14 @@ public final class RecipeContextFormatter {
                 prompt.append("   Steps: ").append(String.join(" | ", recipe.getSteps())).append('\n');
             }
         }
+        if (recipes != null && recipes.size() > 1) {
+            // If the user refers to one positionally ("the second one", "recipe 2", "the last
+            // one") rather than by name, resolve it against the numbering above - don't ask
+            // them to repeat which recipe they mean when the numbering already answers it.
+            prompt.append("(If the user refers to a recipe by position rather than name - "
+                    + "\"the first one\", \"the second one\", \"recipe 2\", \"the last one\" - "
+                    + "match it to the corresponding numbered item above.)\n");
+        }
     }
 
     private static List<String> nullSafe(List<String> list) {

@@ -5,6 +5,7 @@ import com.harvest.chef.reasoning.ReasoningMode;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.regex.Pattern;
 import org.springframework.stereotype.Component;
 
 /**
@@ -98,6 +99,22 @@ public class FollowUpIntentDetector {
             "the recipe", "that recipe", "this recipe", "same recipe", "same one"
     );
 
+    // Ordinal/positional references into a just-shown list of recipes ("actually the second
+    // one", "let's do recipe 2", "I'll take the first option", "the last one looks good").
+    // Regex-based rather than an exhaustive hardcoded phrase list, so it generalizes across
+    // "one"/"recipe"/"option"/"dish" nouns and both word and digit ordinal forms without
+    // needing a new entry for every combination. A bare ordinal reference alone (no adaptation
+    // or coaching verb) still needs to be recognized as SOME kind of follow-up - without this,
+    // "actually the second one" isn't classified at all and falls through to a fresh retrieval
+    // search that treats the literal words "actually the second one" as a query, which returns
+    // nothing coherent. See the bare-backreference fallback below, which already handles this
+    // correctly for "it"/"that" and now does the same for ordinal references.
+    private static final Pattern ORDINAL_BACKREFERENCE = Pattern.compile(
+            "\\b(?:the\\s+)?(first|second|third|fourth|fifth|sixth|last|other|1st|2nd|3rd|4th|5th|6th)"
+                    + "\\s+(?:one|recipe|option|dish)\\b"
+                    + "|\\b(?:recipe|option|number|#)\\s*([1-6])\\b"
+    );
+
     /**
      * @param message the raw current message (not yet normalized)
      */
@@ -124,7 +141,8 @@ public class FollowUpIntentDetector {
             return Optional.of(ReasoningMode.CHEF_COACHING);
         }
 
-        boolean hasBackreference = BACKREFERENCES.stream().anyMatch(ref -> lower.contains(" " + ref + " "));
+        boolean hasBackreference = BACKREFERENCES.stream().anyMatch(ref -> lower.contains(" " + ref + " "))
+                || ORDINAL_BACKREFERENCE.matcher(lower).find();
         if (!hasBackreference) {
             return Optional.empty();
         }
