@@ -9,6 +9,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * Deterministic dish-category inference from a recipe's title and
@@ -108,10 +109,30 @@ public class RecipeCategoryClassifier {
 
     private boolean matchesAny(String text, Set<String> keywords) {
         for (String keyword : keywords) {
-            if (text.contains(keyword)) {
+            if (containsAsWord(text, keyword)) {
                 return true;
             }
         }
         return false;
+    }
+
+    /**
+     * Whole-word containment rather than plain substring matching. Without this, a single-word
+     * keyword like "sweet" (for DESSERT) spuriously matches "Sweet Potato Casserole" or "Sweet
+     * and Sour Chicken" - legitimate savory dinner mains - just because "sweet" is a substring
+     * of the title. That false DESSERT tag then flags them as NOT_A_MEAL, which actively
+     * suppresses genuinely good dinner options from a "healthy dinner" search for no reason a
+     * user could ever guess. Multi-word phrases ("side dish", "stir fry") fall back to plain
+     * substring matching, since word-boundary regex doesn't extend naturally across an embedded
+     * space - the same tradeoff RecipeScoringEngine's own containsAsWord already makes.
+     */
+    private boolean containsAsWord(String haystack, String needle) {
+        if (needle == null || needle.isBlank()) {
+            return false;
+        }
+        if (needle.contains(" ")) {
+            return haystack.contains(needle);
+        }
+        return Pattern.compile("\\b" + Pattern.quote(needle) + "\\b").matcher(haystack).find();
     }
 }
