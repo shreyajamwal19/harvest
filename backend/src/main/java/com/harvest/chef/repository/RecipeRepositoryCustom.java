@@ -18,7 +18,11 @@ public interface RecipeRepositoryCustom {
      * line matches ANY of the given tokens (case-insensitive substring
      * match), capped at {@code limit} results. This is a recall-oriented
      * broad candidate pull - ranking/precision happens afterwards in
-     * RecipeEvaluationService.
+     * RecipeEvaluationService - but title-token coverage is prioritized
+     * within that pull: recipes whose title covers more of the query's
+     * tokens are returned first, so a multi-word dish query ("chicken
+     * alfredo") can't be starved out of a fixed-size candidate pool by a
+     * single very common token ("chicken") alone filling it first.
      */
     List<Recipe> searchByIngredientTokens(List<String> tokens, int limit);
 }
