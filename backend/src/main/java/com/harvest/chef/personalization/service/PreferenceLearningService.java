@@ -46,6 +46,16 @@ public class PreferenceLearningService {
                     Pattern.CASE_INSENSITIVE);
     private static final Pattern SERVING_SIZE_PATTERN =
             Pattern.compile("\\bi\\s+(?:usually\\s+)?cook\\s+for\\s+(\\d{1,2})\\b", Pattern.CASE_INSENSITIVE);
+    // Phase 7 - health goals (Part 3). Values are normalized to the exact tokens
+    // RecipeScoringEngine#healthGoalAlignment recognizes; anything else stored under
+    // HEALTH_GOAL is silently a no-op there rather than mis-scored, so this pattern set and
+    // that method's switch must be kept in sync.
+    private static final Pattern HEALTH_GOAL_PATTERN = Pattern.compile(
+            "\\bi(?:'m| am)\\s+trying\\s+to\\s+(lose\\s+weight|gain\\s+weight|build\\s+muscle|gain\\s+muscle)\\b"
+                    + "|\\bi\\s+want\\s+(?:to\\s+eat\\s+)?(more\\s+protein|less\\s+sodium|less\\s+salt|more\\s+fiber)\\b"
+                    + "|\\bi'?m\\s+(watching\\s+my\\s+sodium|watching\\s+my\\s+salt|eating\\s+heart\\s+healthy|"
+                    + "trying\\s+to\\s+eat\\s+healthier|trying\\s+to\\s+eat\\s+healthy)\\b",
+            Pattern.CASE_INSENSITIVE);
     private static final Pattern LOVE_PATTERN =
             Pattern.compile("\\bi\\s+(?:love|really like|enjoy)\\s+([a-z ]{2,40}?)(?:[.!,]|$)", Pattern.CASE_INSENSITIVE);
     private static final Pattern HATE_PATTERN =
@@ -81,6 +91,14 @@ public class PreferenceLearningService {
         if (serving.find()) {
             learned.add(new LearnedPreference(PreferenceCategory.PREFERRED_SERVING_SIZE,
                     serving.group(1), true));
+        }
+
+        Matcher healthGoal = HEALTH_GOAL_PATTERN.matcher(message);
+        if (healthGoal.find()) {
+            String raw = firstNonNullGroup(healthGoal);
+            if (raw != null) {
+                learned.add(new LearnedPreference(PreferenceCategory.HEALTH_GOAL, mapHealthGoal(raw), true));
+            }
         }
 
         // Only apply the generic love/hate catch-alls if a more specific pattern above didn't
@@ -126,5 +144,33 @@ public class PreferenceLearningService {
             }
         }
         return value;
+    }
+
+    private String firstNonNullGroup(Matcher matcher) {
+        for (int i = 1; i <= matcher.groupCount(); i++) {
+            if (matcher.group(i) != null) {
+                return matcher.group(i);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Canonicalizes free-form health-goal phrasing to the fixed vocabulary
+     * {@code RecipeScoringEngine#healthGoalAlignment} understands. Anything not mapped here
+     * simply never contributes a ranking signal - safer than guessing.
+     */
+    private String mapHealthGoal(String raw) {
+        String value = raw.trim().toLowerCase(Locale.ROOT);
+        return switch (value) {
+            case "lose weight" -> "weight_loss";
+            case "gain weight" -> "weight_gain";
+            case "build muscle", "gain muscle" -> "muscle_gain";
+            case "more protein" -> "high_protein";
+            case "less sodium", "less salt", "watching my sodium", "watching my salt" -> "low_sodium";
+            case "more fiber" -> "high_fiber";
+            case "eating heart healthy" -> "heart_healthy";
+            default -> "general_healthy";
+        };
     }
 }

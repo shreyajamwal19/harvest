@@ -79,6 +79,13 @@ public class RecipeScoringEngine {
     /** Smart Variety - a soft penalty only, never a hard exclusion. */
     private static final double WEIGHT_SMART_VARIETY = 0.05;
 
+    // Phase 7 - explicitly negated ingredients from the CURRENT message ("no mushrooms").
+    // Deliberately the largest single weight in the engine: this is the user's own explicit
+    // intent for the request being answered right now, so it should reliably outrank
+    // everything else (personalization, pantry, popularity) without being an outright hard
+    // filter that could zero out every candidate and produce nothing.
+    private static final double WEIGHT_EXCLUSION = 0.5;
+
     // Phase 6B - pantry-awareness signals. Same additive philosophy: small weights, the
     // current request's own ingredient/intent signals always dominate.
     private static final double WEIGHT_PANTRY_COVERAGE = 0.08;
@@ -138,6 +145,18 @@ public class RecipeScoringEngine {
     private static final Set<String> PROTEIN_KEYWORDS = Set.of(
             "chicken", "beef", "egg", "tofu", "beans", "lentil", "fish", "turkey", "pork",
             "shrimp", "quinoa", "greek yogurt", "protein", "salmon", "tuna"
+    );
+    // Phase 7 - health-goal heuristics (Part 3). Ingredient/preparation keywords, never a
+    // real nutrient count, so recipes are never described in specific gram/mg terms from
+    // this - only "sodium-heavy ingredients" style qualitative language (see
+    // healthGoalAlignment and its explanation text below).
+    private static final Set<String> SODIUM_HEAVY_KEYWORDS = Set.of(
+            "bacon", "sausage", "ham", "soy sauce", "pickle", "pickled", "cured", "canned",
+            "salted", "brine", "cheese", "processed", "deli meat", "instant noodle"
+    );
+    private static final Set<String> FRIED_OR_HEAVY_KEYWORDS = Set.of(
+            "fried", "deep-fried", "deep fried", "battered", "crispy", "butter", "cream",
+            "mayonnaise", "mayo", "bacon", "sausage"
     );
     private static final Set<String> SPICY_KEYWORDS = Set.of(
             "chili", "chilli", "cayenne", "jalapeno", "jalapeño", "hot sauce", "sriracha",
@@ -209,7 +228,28 @@ public class RecipeScoringEngine {
         List<String> explanations = buildExplanations(candidate, mentioned, matchedCount, missing.size(),
                 pantryUtilizationScore(ingredients, matchedCount), importance, preferenceTags, categories, combinedText);
 
+        // Phase 7 - negation is applied last and unconditionally (both ingredient-signal
+        // branches above), and never suppressed by anything else in the plan.
+        double exclusionPenalty = exclusionPenaltyScore(combinedText, plan.getExcludedIngredients());
+        if (exclusionPenalty > 0.0) {
+            total -= WEIGHT_EXCLUSION * exclusionPenalty;
+            explanations.add("Contains something you asked to avoid - ranked lower for that reason.");
+        }
+
         return new RecipeScore(candidate, total, matchedCount, missing, explanations);
+    }
+
+    /**
+     * How strongly this candidate conflicts with what the user explicitly said they don't
+     * want, in [0, 1]. A single hit is already a strong conflict signal; additional excluded
+     * terms found push it further toward the cap rather than linearly forever.
+     */
+    private double exclusionPenaltyScore(String combinedText, List<String> excludedIngredients) {
+        if (excludedIngredients == null || excludedIngredients.isEmpty()) {
+            return 0.0;
+        }
+        long hits = excludedIngredients.stream().filter(term -> containsAsWord(combinedText, term)).count();
+        return hits == 0 ? 0.0 : Math.min(1.0, 0.7 + 0.15 * (hits - 1));
     }
 
     // ---------------------------------------------------------------- Phase 6A: personalization
@@ -308,11 +348,17 @@ public class RecipeScoringEngine {
                         contributions.add(-pref.getConfidence() * conflict);
                     }
                 }
+                case HEALTH_GOAL -> {
+                    Double alignment = healthGoalAlignment(pref.getValue(), combinedText);
+                    if (alignment != null) {
+                        contributions.add(pref.getConfidence() * alignment);
+                    }
+                }
                 default -> {
                     // COOKING_SKILL / PREFERRED_COOKING_DURATION / PREFERRED_SERVING_SIZE /
-                    // HEALTH_GOAL / FAVORITE_APPLIANCE aren't derivable from candidate text alone
-                    // with what RecipeCandidate carries today - left for a future refinement
-                    // rather than guessed at.
+                    // FAVORITE_APPLIANCE aren't derivable from candidate text alone with what
+                    // RecipeCandidate carries today - left for a future refinement rather than
+                    // guessed at.
                 }
             }
         }
@@ -334,6 +380,37 @@ public class RecipeScoringEngine {
                     "ham", "lamb", "turkey")) ? 1.0 : null;
             default -> null; // gluten-free/dairy-free/keto/halal/kosher: not reliably derivable from free-text
                               // ingredient lines without a structured allergen model - deferred rather than guessed.
+        };
+    }
+
+    /**
+     * Phase 7 (Part 3) - lightweight, explainable health-goal alignment in [-1, 1] using
+     * ingredient-keyword proxies (never a fabricated nutrient count - "Never hallucinate
+     * nutrition" applies here too, even though this is ranking, not a Q&A answer). Grounded,
+     * per-candidate USDA lookups for every scored candidate would be both slow (a live HTTP
+     * call per candidate per ranking pass) and often unavailable (no API key configured) -
+     * see {@code NutritionQuestionComposer} for where real USDA numbers are used instead, for
+     * an explicit question about one specific recipe.
+     */
+    private Double healthGoalAlignment(String goal, String combinedText) {
+        boolean vegetableOrLean = containsAny(combinedText, VEGETABLE_KEYWORDS)
+                || containsAny(combinedText, LEAN_PROTEIN_KEYWORDS);
+        boolean heavy = containsAny(combinedText, FRIED_OR_HEAVY_KEYWORDS);
+        boolean sodiumHeavy = containsAny(combinedText, SODIUM_HEAVY_KEYWORDS);
+
+        return switch (goal) {
+            case "weight_loss" -> vegetableOrLean && !heavy ? 1.0 : heavy ? -0.6 : 0.0;
+            case "weight_gain" -> containsAny(combinedText, HIGH_CARB_KEYWORDS)
+                    && containsAny(combinedText, PROTEIN_KEYWORDS) ? 0.8 : 0.0;
+            case "muscle_gain", "high_protein" -> containsAny(combinedText, PROTEIN_KEYWORDS) ? 0.9 : -0.2;
+            case "low_sodium" -> sodiumHeavy ? -0.8 : 0.4;
+            case "high_fiber" -> containsAny(combinedText, VEGETABLE_KEYWORDS)
+                    || combinedText.contains("bean") || combinedText.contains("lentil")
+                    || combinedText.contains("oat") || combinedText.contains("whole grain") ? 0.7 : 0.0;
+            case "heart_healthy" -> vegetableOrLean && !sodiumHeavy && !heavy ? 0.8
+                    : (sodiumHeavy || heavy) ? -0.5 : 0.0;
+            case "general_healthy" -> vegetableOrLean ? 0.6 : heavy ? -0.4 : 0.0;
+            default -> null; // unrecognized goal value - never guessed at
         };
     }
 
@@ -365,15 +442,25 @@ public class RecipeScoringEngine {
     private void addPersonalizationExplanations(List<String> explanations, RecipeCandidate candidate,
                                                  UserProfileSnapshot profile) {
         String combinedText = combinedLowerText(candidate);
+        boolean addedFavorite = false;
+        boolean addedHealthGoal = false;
+
         for (UserProfileSnapshot.PreferenceSignal pref : profile.getPreferences()) {
             if (pref.getConfidence() < 0.6) {
                 continue;
             }
             boolean favorite = pref.getCategory() == PreferenceCategory.FAVORITE_INGREDIENT
                     || pref.getCategory() == PreferenceCategory.FAVORITE_CUISINE;
-            if (favorite && containsAsWord(combinedText, pref.getValue())) {
+            if (!addedFavorite && favorite && containsAsWord(combinedText, pref.getValue())) {
                 explanations.add("Matches something you like: " + pref.getValue() + ".");
-                break; // one personalization callout is plenty - avoid a wall of explanations
+                addedFavorite = true; // one favorite callout is plenty - avoid a wall of explanations
+            }
+            if (!addedHealthGoal && pref.getCategory() == PreferenceCategory.HEALTH_GOAL) {
+                Double alignment = healthGoalAlignment(pref.getValue(), combinedText);
+                if (alignment != null && alignment > 0.5) {
+                    explanations.add("Fits your " + pref.getValue().replace('_', ' ') + " goal.");
+                    addedHealthGoal = true;
+                }
             }
         }
     }
@@ -634,6 +721,21 @@ public class RecipeScoringEngine {
             boolean special = categories.contains(Category.MAIN_COURSE) || categories.contains(Category.DESSERT);
             scores.add(special ? 0.7 : 0.5);
         }
+        // Phase 7 - meal_prep favors dishes that reheat/keep well (soups, rice/pasta bakes,
+        // stews) over delicate or assembly-at-the-table dishes (salads, anything fried-to-order).
+        if (tags.contains("meal_prep")) {
+            boolean reheatsWell = categories.contains(Category.SOUP) || categories.contains(Category.RICE_DISH)
+                    || categories.contains(Category.MAIN_COURSE) || categories.contains(Category.PASTA);
+            boolean fragile = categories.contains(Category.SALAD);
+            scores.add(reheatsWell && !fragile ? 0.85 : fragile ? 0.3 : 0.5);
+        }
+        // movie_night favors easy, hand-held, snackable food over a formal sit-down main course.
+        if (tags.contains("movie_night")) {
+            boolean snackable = categories.contains(Category.SNACK) || categories.contains(Category.DIP)
+                    || categories.contains(Category.SIDE_DISH);
+            boolean formalMain = categories.contains(Category.MAIN_COURSE) && ingredientCount > 10;
+            scores.add(snackable ? 0.85 : formalMain ? 0.3 : 0.55);
+        }
         return scores.isEmpty() ? Optional.empty() : Optional.of(average(scores));
     }
 
@@ -811,6 +913,15 @@ public class RecipeScoringEngine {
                 && (categories.contains(Category.MAIN_COURSE) || categories.contains(Category.SOUP)
                     || categories.contains(Category.PASTA) || categories.contains(Category.BREAD))) {
             explanations.add("Cozy comfort food.");
+        }
+        if (preferenceTags.contains("meal_prep")
+                && (categories.contains(Category.SOUP) || categories.contains(Category.RICE_DISH)
+                    || categories.contains(Category.MAIN_COURSE) || categories.contains(Category.PASTA))) {
+            explanations.add("Reheats well for meal prep.");
+        }
+        if (preferenceTags.contains("movie_night")
+                && (categories.contains(Category.SNACK) || categories.contains(Category.DIP))) {
+            explanations.add("Easy, hand-held movie-night food.");
         }
     }
 

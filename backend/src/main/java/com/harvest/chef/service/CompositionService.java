@@ -5,6 +5,9 @@ import com.harvest.chef.dto.ChefResponseType;
 import com.harvest.chef.dto.ConversationContext;
 import com.harvest.chef.dto.RecipeResponse;
 import com.harvest.chef.dto.RetrievalPlan;
+import com.harvest.chef.nutrition.service.NutritionQuestionComposer;
+import com.harvest.chef.nutrition.service.NutritionQuestionDetector;
+import com.harvest.chef.nutrition.service.NutritionQuestionDetector.NutritionQuestionType;
 import com.harvest.chef.pantry.dto.PantrySnapshot;
 import com.harvest.chef.pantry.service.PantryCommandDetector;
 import com.harvest.chef.pantry.service.PantryCommandDetector.PantryCommand;
@@ -72,6 +75,8 @@ public class CompositionService {
     private final MealPlanningService mealPlanningService;
     private final ShoppingListRequestDetector shoppingListRequestDetector;
     private final ShoppingListService shoppingListService;
+    private final NutritionQuestionDetector nutritionQuestionDetector;
+    private final NutritionQuestionComposer nutritionQuestionComposer;
 
     public ChefResponse compose(ConversationContext context) {
         // Phase 6A - deterministic memory commands ("remember I like...", "show my
@@ -210,6 +215,16 @@ public class CompositionService {
         List<RecipeResponse> previouslyShown = context.getLastShownRecipes();
         if (previouslyShown == null || previouslyShown.isEmpty()) {
             return Optional.empty();
+        }
+
+        // Phase 7 (Part 2) - a nutrition question about the shown recipe is answered with real
+        // USDA data, not the LLM's own guess. Checked before the general follow-up classifier
+        // for the same reason Phase 6A/6B's deterministic commands are checked before
+        // retrieval: a more specific, groundable question always wins over a generic catch-all.
+        Optional<NutritionQuestionType> nutritionQuestion =
+                nutritionQuestionDetector.detect(context.getCurrentMessage());
+        if (nutritionQuestion.isPresent()) {
+            return Optional.of(nutritionQuestionComposer.compose(nutritionQuestion.get(), previouslyShown.get(0)));
         }
 
         Optional<ReasoningMode> mode = followUpIntentDetector.classify(context.getCurrentMessage());

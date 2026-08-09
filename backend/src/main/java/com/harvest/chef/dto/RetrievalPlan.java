@@ -48,4 +48,13 @@ public class RetrievalPlan {
      * dinner" or "I'm hungry", not just literal keyword text matching.
      */
     private Set<String> preferenceTags;
+    /**
+     * Phase 7 - ingredients explicitly negated in the current message ("no mushrooms",
+     * "without cheese", "I don't want nuts"). Never used to hard-filter results (the
+     * architecture stays deterministic-but-soft everywhere), but {@link
+     * com.harvest.chef.retrieval.RecipeScoringEngine} penalizes candidates containing one
+     * of these heavily enough that they effectively never surface ahead of a clean option.
+     * Empty (never null-checked-against by callers) rather than null when nothing was negated.
+     */
+    private List<String> excludedIngredients;
 }

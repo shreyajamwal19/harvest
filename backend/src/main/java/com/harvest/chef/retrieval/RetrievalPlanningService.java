@@ -4,6 +4,7 @@ import com.harvest.chef.dto.ConversationContext;
 import com.harvest.chef.dto.RequestIntent;
 import com.harvest.chef.dto.RetrievalPlan;
 import com.harvest.chef.util.TypoCorrectionUtil;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -34,8 +35,11 @@ import java.util.Set;
  *   leak into the extracted ingredient tokens
  */
 @Service
+@RequiredArgsConstructor
 @Slf4j
 public class RetrievalPlanningService {
+
+    private final NegationDetector negationDetector;
 
     // Small, local keyword sets used only for rule-based classification - not a
     // separate reasoning framework, just inline heuristics for this one stage.
@@ -145,7 +149,16 @@ public class RetrievalPlanningService {
             Map.entry("date_night", Set.of("date night", "cooking for guests", "have guests",
                     "guests coming", "having people over", "people coming over", "hosting",
                     "company coming", "impress")),
-            Map.entry("spicy", Set.of("spicy"))
+            Map.entry("spicy", Set.of("spicy")),
+            // Phase 7 (Part 4) - two occasion phrasings explicitly called out that the existing
+            // tag set didn't cover yet. "prep"/"prepping"/"prepped" stay in STOPWORDS above (so
+            // they're never mis-extracted as an ingredient token) - this is the multi-word
+            // phrase-level signal those same words carry, handled the same way every other
+            // occasion tag already is.
+            Map.entry("meal_prep", Set.of("meal prep", "meal-prep", "meal prepping",
+                    "batch cooking", "batch cook", "prep for the week", "prepping for the week")),
+            Map.entry("movie_night", Set.of("movie night", "movie snacks", "snack for a movie",
+                    "snacks for a movie", "tv snacks"))
     );
 
     private Set<String> detectPreferenceTags(String lower) {
@@ -206,6 +219,18 @@ public class RetrievalPlanningService {
         List<String> ingredients = extractIngredientsWithSynonymTracking(lower, synonymResolved);
         Set<String> preferenceTags = detectPreferenceTags(lower);
 
+        // Phase 7 - "no mushrooms" / "without cheese" must never become a positive mentioned
+        // ingredient (the opposite of what the user asked for). Detected on the raw message
+        // (negation phrasing relies on word order the already-tokenized `ingredients` list
+        // has lost) and any extracted ingredient token that IS one of the negated terms is
+        // dropped from the positive list rather than silently searched for.
+        Set<String> excludedIngredients = negationDetector.detect(message);
+        if (!excludedIngredients.isEmpty()) {
+            ingredients = ingredients.stream()
+                    .filter(ingredient -> excludedIngredients.stream().noneMatch(excluded -> isWordIn(ingredient, excluded)))
+                    .toList();
+        }
+
         boolean needsExternalRecipes = ingredients.isEmpty();
         boolean needsNutritionGrounding = NUTRITION_KEYWORDS.stream().anyMatch(lower::contains);
         boolean needsIngredientIntelligence = INGREDIENT_INTELLIGENCE_KEYWORDS.stream().anyMatch(lower::contains);
@@ -214,7 +239,7 @@ public class RetrievalPlanningService {
 
         String reasoningNote = "Rule-based plan: intent=" + (isTechnique ? "TECHNIQUE" : "RECIPE")
                 + ", " + ingredients.size() + " ingredient token(s), " + preferenceTags.size()
-                + " preference tag(s) parsed from the message.";
+                + " preference tag(s), " + excludedIngredients.size() + " excluded term(s) parsed from the message.";
 
         RetrievalPlan plan = RetrievalPlan.builder()
                 .intent(isTechnique ? RequestIntent.TECHNIQUE : RequestIntent.RECIPE)
@@ -227,10 +252,21 @@ public class RetrievalPlanningService {
                 .continuation(false)
                 .synonymResolvedIngredients(new ArrayList<>(synonymResolved))
                 .preferenceTags(preferenceTags)
+                .excludedIngredients(new ArrayList<>(excludedIngredients))
                 .build();
 
         log.info("[retrieval-planning] {}", plan.getReasoningNote());
         return plan;
+    }
+
+    /** Whole-word containment: is {@code word} one of the space-separated words in {@code phrase}? */
+    private boolean isWordIn(String word, String phrase) {
+        for (String piece : phrase.split("\\s+")) {
+            if (piece.equals(word)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -260,6 +296,7 @@ public class RetrievalPlanningService {
                     .continuation(false)
                     .synonymResolvedIngredients(List.of())
                     .preferenceTags(Set.of())
+                    .excludedIngredients(List.of())
                     .build();
         }
 
@@ -276,6 +313,7 @@ public class RetrievalPlanningService {
                 .continuation(true)
                 .synonymResolvedIngredients(List.of())
                 .preferenceTags(Set.of())
+                .excludedIngredients(List.of())
                 .build();
     }
 

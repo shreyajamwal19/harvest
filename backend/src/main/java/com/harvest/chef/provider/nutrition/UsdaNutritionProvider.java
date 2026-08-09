@@ -107,6 +107,18 @@ public class UsdaNutritionProvider implements NutritionKnowledgeProvider {
         Double protein = extractNutrient(nutrients, "Protein");
         Double carbs = extractNutrient(nutrients, "Carbohydrate, by difference");
         Double fat = extractNutrient(nutrients, "Total lipid (fat)");
+        // Phase 7 (Part 2) - additional USDA-grounded micronutrients. Same "never invented"
+        // rule as the four above: extractNutrient returns null (not a guess) when USDA's
+        // response doesn't include a given nutrient for the matched food.
+        Double fiber = extractNutrient(nutrients, "Fiber, total dietary");
+        Double sugar = extractNutrient(nutrients, "Sugars, total including NLEA");
+        Double sodium = extractNutrient(nutrients, "Sodium, Na");
+        Double iron = extractNutrient(nutrients, "Iron, Fe");
+        Double calcium = extractNutrient(nutrients, "Calcium, Ca");
+        Double potassium = extractNutrient(nutrients, "Potassium, K");
+        Double vitaminA = extractNutrient(nutrients, "Vitamin A, RAE");
+        Double vitaminC = extractNutrient(nutrients, "Vitamin C, total ascorbic acid");
+        Double vitaminD = extractNutrient(nutrients, "Vitamin D (D2 + D3)");
 
         return Optional.of(NutritionInfo.builder()
                 .queryTerm(ingredientName)
@@ -115,6 +127,16 @@ public class UsdaNutritionProvider implements NutritionKnowledgeProvider {
                 .proteinGrams(protein)
                 .carbsGrams(carbs)
                 .fatGrams(fat)
+                .fiberGrams(fiber)
+                .sugarGrams(sugar)
+                .sodiumMg(sodium)
+                .ironMg(iron)
+                .calciumMg(calcium)
+                .potassiumMg(potassium)
+                .vitaminAMcg(vitaminA)
+                .vitaminCMg(vitaminC)
+                .vitaminDMcg(vitaminD)
+                .servingSize("100g (USDA reference amount)")
                 .source("USDA FoodData Central")
                 .build());
     }
