@@ -203,17 +203,52 @@ public final class TypoCorrectionUtil {
         return result.toString();
     }
 
+    /**
+     * A flat "distance <= 2" ceiling is far too loose for a short word: 2 edits on a 5-letter
+     * word is a 40% character change, which routinely lands on a real but unrelated word rather
+     * than a typo of the intended one - e.g. "pesto" (a real, if uncommon, ingredient not in this
+     * vocabulary) is distance 2 from "pasta" and would otherwise be silently mangled into it.
+     * Scaling the ceiling by length keeps the fallback doing what its own documentation promises
+     * (leaving unusual-but-real ingredient names alone) while still catching genuine typos on
+     * longer words ("brocoli" -> "broccoli" is distance 1 either way).
+     */
+    private static int maxEditDistanceFor(int wordLength) {
+        if (wordLength <= 6) {
+            return 1;
+        }
+        return 2;
+    }
+
+    /**
+     * Ties are broken deterministically - by smallest length difference from the input, then
+     * lexicographically - rather than by whichever vocabulary word {@code Set.of()} happens to
+     * iterate first. Set iteration order isn't guaranteed stable across JVM instances, so without
+     * this a genuine tie could silently resolve to a different correction on different server
+     * restarts even for the exact same typo.
+     */
     private static String fuzzyMatch(String lower) {
         String best = null;
         int bestDistance = Integer.MAX_VALUE;
+        int bestLengthDiff = Integer.MAX_VALUE;
+        int ceiling = maxEditDistanceFor(lower.length());
+
         for (String candidate : VOCABULARY) {
             int distance = restrictedDamerauLevenshtein(lower, candidate);
-            if (distance < bestDistance) {
+            if (distance > ceiling) {
+                continue;
+            }
+            int lengthDiff = Math.abs(lower.length() - candidate.length());
+            boolean better = distance < bestDistance
+                    || (distance == bestDistance && lengthDiff < bestLengthDiff)
+                    || (distance == bestDistance && lengthDiff == bestLengthDiff
+                        && (best == null || candidate.compareTo(best) < 0));
+            if (better) {
                 bestDistance = distance;
+                bestLengthDiff = lengthDiff;
                 best = candidate;
             }
         }
-        return (best != null && bestDistance <= 2) ? best : lower;
+        return best != null ? best : lower;
     }
 
     /**
@@ -221,10 +256,11 @@ public final class TypoCorrectionUtil {
      * "chicken") counts as a single edit instead of two substitutions. This is the "restricted"
      * (optimal string alignment) variant, not full Damerau-Levenshtein - it doesn't allow a
      * transposed pair to be edited again afterwards, which is a non-issue at the short word
-     * lengths and distance-2 ceiling this is used at, and keeps the DP simple. The same
-     * distance-2 cutoff as before applies, so this doesn't loosen false-positive risk - it just
-     * scores a genuine one-swap typo the way a person would actually perceive it, freeing that
-     * budget for real length-appropriate matches instead of being consumed by a transposition.
+     * lengths and small distance ceilings this is used at (see {@link #maxEditDistanceFor}), and
+     * keeps the DP simple. Scoring an adjacent swap as one edit rather than two doesn't loosen
+     * false-positive risk - it just scores a genuine one-swap typo the way a person would
+     * actually perceive it, freeing that budget for real length-appropriate matches instead of
+     * being consumed by a transposition.
      */
     private static int restrictedDamerauLevenshtein(String a, String b) {
         int[][] dp = new int[a.length() + 1][b.length() + 1];

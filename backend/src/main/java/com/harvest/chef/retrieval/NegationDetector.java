@@ -3,6 +3,7 @@ package com.harvest.chef.retrieval;
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -35,16 +36,23 @@ public class NegationDetector {
     };
 
     // "no" and "not" also carry sentence-level meaning unrelated to an ingredient/tag exclusion
-    // ("no thanks", "not sure", "not really") - these never get treated as a food term.
+    // ("no thanks", "not sure", "not really") - these never get treated as a food term. Checked
+    // against the FIRST WORD of the cleaned capture (not just the whole phrase), since these are
+    // functional/discourse words that never legitimately lead a food-term phrase - "not sure
+    // what to make", "not going to lie", "not really into it" should all be discarded entirely,
+    // not partially captured as a bogus excluded ingredient like "sure what to".
     private static final Set<String> NON_FOOD_NEGATION_NOISE = Set.of(
-            "thanks", "thank you", "problem", "worries", "idea", "clue", "sure", "really",
-            "much", "way", "sure thing", "big deal", "rush", "hurry");
+            "thanks", "thank", "problem", "worries", "idea", "clue", "sure", "really",
+            "much", "way", "big", "rush", "hurry", "going", "able", "interested", "certain",
+            "positive", "in", "sold", "feeling", "up", "keen", "one", "fussed");
 
-    // Trailing filler that regularly tags along after the real excluded term ("hold the onions
-    // please") and would otherwise become part of the captured phrase, breaking the whole-phrase
-    // containment check used against a candidate's ingredient text.
-    private static final Set<String> TRAILING_FILLER = Set.of(
-            "please", "thanks", "really", "too", "very", "actually", "though", "kindly");
+    // Filler/intensifier words that regularly surround the real excluded term ("hold the onions
+    // please", "not too spicy", "no really spicy peppers") and would otherwise become part of
+    // the captured phrase, breaking the whole-phrase containment/lookup check used downstream.
+    // Stripped from BOTH ends, since intensifiers can precede or follow the target word.
+    private static final Set<String> FILLER_WORDS = Set.of(
+            "please", "thanks", "really", "too", "very", "actually", "though", "kindly",
+            "so", "quite", "super", "extremely", "particularly", "just", "even", "also");
 
     /** Deterministic, LLM-free scan for explicitly excluded ingredients/tags in a fresh message. */
     public Set<String> detect(String message) {
@@ -58,7 +66,7 @@ public class NegationDetector {
             Matcher matcher = pattern.matcher(lower);
             while (matcher.find()) {
                 String term = cleanTerm(matcher.group(1));
-                if (term.isEmpty() || NON_FOOD_NEGATION_NOISE.contains(term)) {
+                if (term.isEmpty() || isNonFoodNoise(term)) {
                     continue;
                 }
                 excluded.add(term);
@@ -88,14 +96,44 @@ public class NegationDetector {
         return lower.trim();
     }
 
-    /** Strips trailing filler words and caps the phrase to a short, ingredient-shaped length. */
+    /**
+     * Strips filler/intensifier words from BOTH ends of the capture (so "too spicy" and
+     * "spicy too" both reduce to "spicy"), then caps the remainder to a short, ingredient-shaped
+     * length. Leading-strip is what earlier versions of this detector missed: without it, "not
+     * too spicy" would exclude on the literal phrase "too spicy" - which never appears verbatim
+     * in any recipe - so the negation silently did nothing.
+     */
     private String cleanTerm(String rawCapture) {
-        String[] words = rawCapture.trim().split("\\s+");
-        int end = words.length;
-        while (end > 0 && TRAILING_FILLER.contains(words[end - 1])) {
+        java.util.List<String> words = new java.util.ArrayList<>(
+                java.util.Arrays.asList(rawCapture.trim().split("\\s+")));
+
+        int start = 0;
+        while (start < words.size() && FILLER_WORDS.contains(words.get(start))) {
+            start++;
+        }
+        int end = words.size();
+        while (end > start && FILLER_WORDS.contains(words.get(end - 1))) {
             end--;
         }
-        end = Math.min(end, 3);
-        return String.join(" ", java.util.Arrays.asList(words).subList(0, end)).trim();
+        if (start >= end) {
+            return "";
+        }
+        List<String> trimmed = words.subList(start, Math.min(end, start + 3));
+        return String.join(" ", trimmed).trim();
+    }
+
+    /**
+     * A term is non-food noise if its first word is a functional/discourse word that never
+     * legitimately leads a food term ("sure", "really", "going", ...) - checking only the first
+     * word (rather than requiring an exact whole-phrase match) is what catches "not sure what to
+     * make" and "not going to bother with a sauce", where the noise word is followed by more
+     * captured filler rather than standing alone.
+     */
+    private boolean isNonFoodNoise(String term) {
+        if (term.isEmpty()) {
+            return true;
+        }
+        String firstWord = term.split("\\s+")[0];
+        return NON_FOOD_NEGATION_NOISE.contains(firstWord) || NON_FOOD_NEGATION_NOISE.contains(term);
     }
 }

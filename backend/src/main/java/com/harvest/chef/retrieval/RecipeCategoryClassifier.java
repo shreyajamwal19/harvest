@@ -50,10 +50,15 @@ public class RecipeCategoryClassifier {
                 "french toast", "cereal", "bagel"));
         TITLE_KEYWORDS.put(Category.LUNCH, Set.of("lunch", "sandwich", "wrap", "panini", "bowl"));
         TITLE_KEYWORDS.put(Category.DINNER, Set.of("dinner", "supper"));
+        // Deliberately NOT including bare "sweet": it's a whole word in plenty of savory dish
+        // names ("Sweet Potato Casserole", "Sweet and Sour Chicken", "Sweet Corn Fritters",
+        // "Candied Sweet Potatoes"), and word-boundary matching alone doesn't disambiguate that
+        // - the word itself is just genuinely ambiguous between "a sweet flavor" and "a dessert".
+        // Multi-word dessert-specific phrases are unambiguous and stay.
         TITLE_KEYWORDS.put(Category.DESSERT, Set.of(
                 "cake", "cookie", "cookies", "brownie", "brownies", "pie", "tart", "pudding",
                 "ice cream", "cheesecake", "dessert", "candy", "fudge", "cupcake", "muffin",
-                "chocolate chip", "sweet"));
+                "chocolate chip", "sweet treat", "sweet tooth"));
         TITLE_KEYWORDS.put(Category.SNACK, Set.of("snack", "bites", "chips", "popcorn", "trail mix"));
         TITLE_KEYWORDS.put(Category.DRINK, Set.of(
                 "smoothie", "shake", "cocktail", "lemonade", "juice", "punch", "latte", "tea",

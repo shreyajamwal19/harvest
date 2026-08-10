@@ -163,6 +163,37 @@ public class RecipeScoringEngine {
             "habanero", "spicy", "curry", "szechuan", "pepper flakes", "hot pepper"
     );
 
+    // Dedicated exclusion vocabularies (distinct from the scoring keyword sets above, which are
+    // tuned for positive-preference alignment, not exclusion safety). Each covers the way an
+    // ingredient actually appears in a recipe's title/ingredient text, not the category name
+    // itself - recipes almost never literally say "dairy" or "meat", and word-boundary matching
+    // means "nuts" never matches inside "walnuts"/"peanuts" as one token, so these need their
+    // own real vocabulary rather than reusing the bare category word.
+    private static final Set<String> DAIRY_KEYWORDS = Set.of(
+            "milk", "cheese", "butter", "cream", "yogurt", "buttermilk", "ghee", "sour cream",
+            "cream cheese", "half and half", "whipped cream", "parmesan", "mozzarella", "cheddar",
+            "ricotta", "condensed milk", "evaporated milk", "custard"
+    );
+    private static final Set<String> MEAT_ONLY_KEYWORDS = Set.of(
+            "chicken", "beef", "pork", "bacon", "sausage", "ham", "lamb", "turkey", "meat",
+            "veal", "duck", "steak", "ground beef", "chorizo", "prosciutto", "pepperoni"
+    );
+    private static final Set<String> SEAFOOD_KEYWORDS = Set.of(
+            "fish", "shrimp", "salmon", "tuna", "shellfish", "crab", "lobster", "cod", "tilapia",
+            "seafood", "anchovy", "anchovies", "scallop", "scallops", "mussel", "mussels",
+            "clam", "clams", "squid", "calamari"
+    );
+    private static final Set<String> NUT_KEYWORDS = Set.of(
+            "walnut", "walnuts", "peanut", "peanuts", "almond", "almonds", "cashew", "cashews",
+            "pecan", "pecans", "pistachio", "pistachios", "hazelnut", "hazelnuts", "macadamia",
+            "macadamias", "brazil nut", "brazil nuts", "pine nut", "pine nuts", "nut", "nuts",
+            "peanut butter", "almond butter", "nut butter"
+    );
+    private static final Set<String> GLUTEN_PROXY_KEYWORDS = Set.of(
+            "flour", "wheat", "bread", "pasta", "noodle", "noodles", "breadcrumbs", "barley",
+            "couscous", "soy sauce", "beer", "cracker", "crackers", "tortilla"
+    );
+
     // Excluded "trait" terms (e.g. "spicy" from "not spicy") that have an existing keyword-set
     // definition elsewhere in this engine get checked against that richer vocabulary instead of
     // the bare literal word - a recipe almost never spells out the word "spicy" itself, it just
@@ -170,8 +201,29 @@ public class RecipeScoringEngine {
     // preference tag already scores against (see dietaryAlignment) rather than a second,
     // separately-maintained list, and this map is where any future trait-word/keyword-set pair
     // would be added, so the exclusion path automatically benefits the same way.
-    private static final Map<String, Set<String>> EXCLUDABLE_TRAIT_KEYWORDS = Map.of(
-            "spicy", SPICY_KEYWORDS
+    private static final Map<String, Set<String>> EXCLUDABLE_TRAIT_KEYWORDS = Map.ofEntries(
+            Map.entry("spicy", SPICY_KEYWORDS),
+            Map.entry("spice", SPICY_KEYWORDS),
+            Map.entry("heat", SPICY_KEYWORDS),
+            Map.entry("dairy", DAIRY_KEYWORDS),
+            Map.entry("lactose", DAIRY_KEYWORDS),
+            Map.entry("meat", MEAT_ONLY_KEYWORDS),
+            Map.entry("red meat", MEAT_ONLY_KEYWORDS),
+            Map.entry("fish", SEAFOOD_KEYWORDS),
+            Map.entry("seafood", SEAFOOD_KEYWORDS),
+            Map.entry("shellfish", SEAFOOD_KEYWORDS),
+            Map.entry("nuts", NUT_KEYWORDS),
+            Map.entry("nut", NUT_KEYWORDS),
+            Map.entry("tree nuts", NUT_KEYWORDS),
+            Map.entry("gluten", GLUTEN_PROXY_KEYWORDS),
+            Map.entry("wheat", GLUTEN_PROXY_KEYWORDS),
+            Map.entry("carbs", HIGH_CARB_KEYWORDS),
+            Map.entry("carbohydrates", HIGH_CARB_KEYWORDS),
+            Map.entry("sodium", SODIUM_HEAVY_KEYWORDS),
+            Map.entry("salt", SODIUM_HEAVY_KEYWORDS),
+            Map.entry("fried", FRIED_OR_HEAVY_KEYWORDS),
+            Map.entry("oil", FRIED_OR_HEAVY_KEYWORDS),
+            Map.entry("greasy", FRIED_OR_HEAVY_KEYWORDS)
     );
 
     private final RecipeCategoryClassifier categoryClassifier;
