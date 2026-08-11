@@ -32,6 +32,8 @@ public class NutritionQuestionDetector {
                     + "is (?:it|this) protein.rich");
     private static final Pattern CARBS = Pattern.compile(
             "low carb|how many carbs|carb content|how much carbs?|is this low.carb");
+    private static final Pattern FAT = Pattern.compile(
+            "how much fat|fat content|is this low.fat|is (?:it|this) fatty|how fatty|grams? of fat");
     private static final Pattern FIBER = Pattern.compile("how much fiber|fiber content|high in fiber");
     private static final Pattern SODIUM = Pattern.compile(
             "how much sodium|sodium content|is this low sodium|too much salt|how salty");
@@ -53,6 +55,9 @@ public class NutritionQuestionDetector {
         }
         if (CARBS.matcher(lower).find()) {
             return Optional.of(NutritionQuestionType.CARBS);
+        }
+        if (FAT.matcher(lower).find()) {
+            return Optional.of(NutritionQuestionType.FAT);
         }
         if (FIBER.matcher(lower).find()) {
             return Optional.of(NutritionQuestionType.FIBER);
