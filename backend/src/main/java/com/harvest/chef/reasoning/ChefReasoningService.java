@@ -93,7 +93,16 @@ public class ChefReasoningService {
             return Optional.empty();
         }
 
-        LLMPrompt prompt = switch (mode) {
+        // "Which one is better?" only makes sense with something to compare - if only one
+        // recipe survived last turn's ranking, there's nothing to weigh against, and handing the
+        // comparison prompt a single recipe block would ask the model to "compare" against
+        // nothing. Chef coaching (open-ended chat grounded in the one recipe shown) is the
+        // coherent fallback, not a forced comparison.
+        ReasoningMode effectiveMode = (mode == ReasoningMode.RECIPE_COMPARISON && previouslyShownRecipes.size() < 2)
+                ? ReasoningMode.CHEF_COACHING
+                : mode;
+
+        LLMPrompt prompt = switch (effectiveMode) {
             case RECIPE_EXPLANATION ->
                     recipeExplanationPromptBuilder.buildForExplainWhyFollowUp(context, previouslyShownRecipes);
             case RECIPE_COMPARISON -> recipeComparisonPromptBuilder.build(context, previouslyShownRecipes);
@@ -103,16 +112,16 @@ public class ChefReasoningService {
                     "TECHNIQUE_EXPLANATION is handled via reasonAboutTechnique, not reasonAboutFollowUp");
         };
 
-        ReasoningConfidence confidence = switch (mode) {
+        ReasoningConfidence confidence = switch (effectiveMode) {
             case RECIPE_EXPLANATION, RECIPE_COMPARISON -> ReasoningConfidence.HIGH;
             case RECIPE_ADAPTATION -> ReasoningConfidence.MEDIUM;
             case CHEF_COACHING, TECHNIQUE_EXPLANATION -> ReasoningConfidence.LOW;
         };
 
-        if (mode == ReasoningMode.RECIPE_EXPLANATION) {
-            return callAndParseExplanation(prompt, previouslyShownRecipes.isEmpty(), mode, confidence);
+        if (effectiveMode == ReasoningMode.RECIPE_EXPLANATION) {
+            return callAndParseExplanation(prompt, previouslyShownRecipes.isEmpty(), effectiveMode, confidence);
         }
-        return callAndParseMessageOnly(prompt, mode, confidence, FOLLOW_UP_MAX_TOKENS);
+        return callAndParseMessageOnly(prompt, effectiveMode, confidence, FOLLOW_UP_MAX_TOKENS);
     }
 
     /**

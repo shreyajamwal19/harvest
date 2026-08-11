@@ -74,6 +74,14 @@ public class RecipeExplanationPromptBuilder {
             prompt.append("Detected preferences: ")
                     .append(String.join(", ", plan.getPreferenceTags())).append('\n');
         }
+        if (plan.getExcludedIngredients() != null && !plan.getExcludedIngredients().isEmpty()) {
+            // Without this, the explanation layer has no way to know an exclusion was honored at
+            // all ("no dairy", "not spicy", "without nuts") and can't acknowledge it - it only
+            // ever sees the positive ingredient/preference signals above, even though the
+            // deterministic engine already filtered on this.
+            prompt.append("Explicitly excluded by the user (already filtered out by retrieval): ")
+                    .append(String.join(", ", plan.getExcludedIngredients())).append('\n');
+        }
         if (plan.isContinuation()) {
             prompt.append("This is a \"more\" turn - the user wants additional options beyond what "
                     + "was already shown.\n");
