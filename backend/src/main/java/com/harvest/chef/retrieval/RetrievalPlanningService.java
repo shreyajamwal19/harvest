@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * The Retrieval Orchestrator's planning step. The pipeline's entry point
@@ -69,6 +70,17 @@ public class RetrievalPlanningService {
             "i have got", "ive got", "i would like", "id like", "i have", "i want",
             "give me", "show me", "make something with", "cook with", "using", "with"
     );
+
+    // Word-boundary-aware equivalents of LEAD_IN_PHRASES, built once. Plain String.replace()
+    // does a literal substring replace with no regard for word boundaries - the single-word
+    // phrase "with" is a literal substring of "without" and "within", so replacing it naively
+    // turned "chicken without dairy" into "chicken  out dairy", leaving a phantom "out" token
+    // that survived as a bogus extracted ingredient (it isn't in STOPWORDS). "without" is one of
+    // the single most common ways a user expresses an exclusion, so this wasn't a narrow edge
+    // case - it silently corrupted ingredient extraction on a large fraction of negated requests.
+    private static final List<Pattern> LEAD_IN_PATTERNS = LEAD_IN_PHRASES.stream()
+            .map(phrase -> Pattern.compile("\\b" + Pattern.quote(phrase) + "\\b"))
+            .toList();
 
     // Words that carry no search signal on their own - conversational filler,
     // pronouns, and generic verbs that would otherwise pollute the extracted
@@ -266,10 +278,29 @@ public class RetrievalPlanningService {
         return plan;
     }
 
-    /** Whole-word containment: is {@code word} one of the space-separated words in {@code phrase}? */
+    /**
+     * Is {@code word} (an extracted ingredient token, possibly multi-word after synonym
+     * resolution - e.g. "bell pepper") excluded by {@code phrase} (a negated term, also
+     * possibly multi-word)? Checks whole-phrase equality first, then whole-word containment in
+     * either direction. The either-direction check matters because either side can be the
+     * multi-word one: "no bell pepper" (multi-word phrase) must remove an extracted "bell
+     * pepper" token, and a bare "no onion" should also remove an extracted "green onion" token.
+     * A prior version only checked single-word pieces of {@code phrase} against the whole of
+     * {@code word}, so an exact multi-word match like "bell pepper" == "bell pepper" never
+     * actually matched - the single most common case (the user's negated term is exactly the
+     * synonym-expanded ingredient name) silently failed.
+     */
     private boolean isWordIn(String word, String phrase) {
+        if (word.equals(phrase)) {
+            return true;
+        }
         for (String piece : phrase.split("\\s+")) {
             if (piece.equals(word)) {
+                return true;
+            }
+        }
+        for (String piece : word.split("\\s+")) {
+            if (piece.equals(phrase)) {
                 return true;
             }
         }
@@ -409,8 +440,8 @@ public class RetrievalPlanningService {
      */
     private List<String> extractIngredientsWithSynonymTracking(String lower, Set<String> synonymResolvedOut) {
         String cleaned = lower;
-        for (String phrase : LEAD_IN_PHRASES) {
-            cleaned = cleaned.replace(phrase, " ");
+        for (Pattern pattern : LEAD_IN_PATTERNS) {
+            cleaned = pattern.matcher(cleaned).replaceAll(" ");
         }
         cleaned = cleaned.replaceAll("[.!?,]", " ");
 

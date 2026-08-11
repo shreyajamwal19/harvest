@@ -1,6 +1,7 @@
 package com.harvest.chef.retrieval;
 
 import com.harvest.chef.reasoning.ReasoningMode;
+import lombok.RequiredArgsConstructor;
 
 import java.util.List;
 import java.util.Locale;
@@ -25,7 +26,10 @@ import org.springframework.stereotype.Component;
  * rather than a separate NLU framework.
  */
 @Component
+@RequiredArgsConstructor
 public class FollowUpIntentDetector {
+
+    private final NegationDetector negationDetector;
 
     // "Not this one, give me something different" - RetrievalPlanningService's own continuation
     // handling (excluding shown titles, reusing the last search) is the right deterministic tool
@@ -49,20 +53,22 @@ public class FollowUpIntentDetector {
             "beginner friendly", "which uses fewer", "which freezes better"
     );
 
-    // Phrases that are only coherent as a follow-up adaptation - they already reference "the
-    // thing already shown" grammatically, so no separate backreference check is needed. Bare
-    // "without"/"instead" are included unconditionally (not just "without the"/"instead of the")
-    // to catch shorthand like "without onions" or "with chicken instead" - safe because this
-    // detector is only ever consulted by CompositionService when a prior recipe already exists
-    // in session state (see CompositionService#tryComposeFollowUp), so a fresh first message
-    // that happens to contain "instead" can never be misrouted here.
+    // Bare "without"/"instead" are included unconditionally (not just "without the"/"instead of
+    // the") to catch shorthand like "without onions" or "with chicken instead" - safe because
+    // this detector is only ever consulted by CompositionService when a prior recipe already
+    // exists in session state (see CompositionService#tryComposeFollowUp), so a fresh first
+    // message that happens to contain "instead" can never be misrouted here. Any other negated
+    // food term ("no mushrooms", "skip the cilantro", "hold the cheese", ...) is recognized
+    // generally via NegationDetector below rather than hardcoding specific ingredient names here
+    // - a fixed list like "no onions"/"no garlic" only ever covers the exact examples someone
+    // thought to type in, and silently misses everything else a real user actually says.
     private static final List<String> ADAPTATION_PHRASES = List.of(
             "make it", "make this", "double it", "halve it", "double this", "halve this",
             "cook for one", "cook for two", "cook for four", "cook for six", "cook for eight",
             "cook for ten", "cook for twelve", "without the", "without", "leave out the",
             "swap the", "substitute the", "instead of the", "instead", "replace butter",
             "replace the", "lower calories", "higher protein", "what if i remove",
-            "what if i dont have", "no onions", "no garlic"
+            "what if i dont have"
     );
 
     // Modifier concepts that only make sense applied to something already on the table -
@@ -135,6 +141,15 @@ public class FollowUpIntentDetector {
             return Optional.of(ReasoningMode.RECIPE_COMPARISON);
         }
         if (ADAPTATION_PHRASES.stream().anyMatch(lower::contains)) {
+            return Optional.of(ReasoningMode.RECIPE_ADAPTATION);
+        }
+        // General negation catch-all: "no mushrooms", "skip the cilantro", "hold the cheese",
+        // "don't want cilantro" - anything NegationDetector already knows how to parse. Safe to
+        // treat as an adaptation unconditionally here (rather than requiring a backreference
+        // too) for the same reason the bare "without"/"instead" phrases above are safe: this
+        // detector only runs when a prior recipe already exists in session state, so a negated
+        // food term in this context is unambiguously about that recipe, not a fresh request.
+        if (!negationDetector.detect(message).isEmpty()) {
             return Optional.of(ReasoningMode.RECIPE_ADAPTATION);
         }
         if (COACHING_PHRASES.stream().anyMatch(lower::contains)) {
