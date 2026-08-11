@@ -44,7 +44,8 @@ public class NegationDetector {
     private static final Set<String> NON_FOOD_NEGATION_NOISE = Set.of(
             "thanks", "thank", "problem", "worries", "idea", "clue", "sure", "really",
             "much", "way", "big", "rush", "hurry", "going", "able", "interested", "certain",
-            "positive", "in", "sold", "feeling", "up", "keen", "one", "fussed");
+            "positive", "in", "into", "sold", "feeling", "up", "keen", "one", "fussed",
+            "bothered", "convinced", "worried", "ready", "done", "here", "today");
 
     // Filler/intensifier words that regularly surround the real excluded term ("hold the onions
     // please", "not too spicy", "no really spicy peppers") and would otherwise become part of

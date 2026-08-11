@@ -75,7 +75,13 @@ public class RecipeCategoryClassifier {
                 "pasta", "spaghetti", "noodle", "noodles", "lasagna", "macaroni", "penne",
                 "fettuccine", "ravioli", "linguine"));
         TITLE_KEYWORDS.put(Category.RICE_DISH, Set.of("rice", "risotto", "pilaf", "paella", "biryani", "fried rice"));
-        TITLE_KEYWORDS.put(Category.BREAD, Set.of("bread", "loaf", "biscuit", "biscuits", "roll", "rolls", "focaccia", "naan"));
+        // Deliberately NOT including bare "roll"/"rolls": the same ambiguity problem "sweet"
+        // has above - "roll" is a whole word in plenty of non-bread dishes (spring rolls, egg
+        // rolls, sushi rolls, cabbage rolls, lettuce rolls), so word-boundary matching alone
+        // would mistag them as BREAD. Bread-specific roll phrasing is unambiguous and kept.
+        TITLE_KEYWORDS.put(Category.BREAD, Set.of(
+                "bread", "loaf", "biscuit", "biscuits", "focaccia", "naan", "dinner roll",
+                "dinner rolls", "bread roll", "bread rolls", "cinnamon roll", "cinnamon rolls"));
 
         INGREDIENT_KEYWORDS.put(Category.DESSERT, Set.of("sugar", "powdered sugar", "chocolate chips", "frosting"));
         INGREDIENT_KEYWORDS.put(Category.PASTA, Set.of("pasta", "spaghetti", "noodles", "macaroni"));
