@@ -27,8 +27,13 @@ public class RecipeIngredientNameExtractor {
                     + "cloves?|slices?|cans?|packages?|pkgs?|sticks?|bunch(?:es)?|heads?)\\b\\s*(?:of\\s+)?",
             Pattern.CASE_INSENSITIVE);
     private static final Pattern LEADING_BARE_NUMBER = Pattern.compile("^[\\d./\\s]+\\s*");
+    /**
+     * Prep notes are very often preceded by an adverb ("finely chopped", "thinly sliced",
+     * "roughly crushed", "coarsely grated") rather than the bare verb - the optional
+     * "\w+ly\s+" here lets the whole clause strip regardless of whether an adverb is present.
+     */
     private static final Pattern TRAILING_PREP_NOTE = Pattern.compile(
-            ",\\s*(?:diced|chopped|minced|sliced|grated|crushed|peeled|melted|softened|"
+            ",\\s*(?:\\w+ly\\s+)?(?:diced|chopped|minced|sliced|grated|crushed|peeled|melted|softened|"
                     + "room temperature|to taste|for garnish|optional|beaten|shredded|cubed).*$",
             Pattern.CASE_INSENSITIVE);
 

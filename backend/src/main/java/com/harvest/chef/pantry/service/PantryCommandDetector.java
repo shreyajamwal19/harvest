@@ -36,6 +36,22 @@ public class PantryCommandDetector {
     private static final Pattern HAVE = Pattern.compile("^i\\s+have\\s+(.+?)[.!?]*$", Pattern.CASE_INSENSITIVE);
     private static final Pattern ADD = Pattern.compile("^add\\s+(?:some\\s+)?(.+?)[.!?]*$", Pattern.CASE_INSENSITIVE);
 
+    /**
+     * Statements like "I have eggs, spinach and rice" (a pure pantry update) are structurally
+     * identical to the opening clause of a recipe request like "I have eggs, spinach and rice,
+     * what can I make?" - the only signal distinguishing them is that the second one goes on to
+     * actually ask something. A trailing question mark, or a recognizable "what can I
+     * make"-shaped ask embedded anywhere in the message, means the whole thing is a recipe
+     * request wearing pantry-statement clothing, not a real pantry command - so ADD/HAVE/BOUGHT
+     * must not swallow it. REMOVE/CONSUME/SHOW/CLEAR phrasings are not ambiguous this way and
+     * don't need the guard.
+     */
+    private static final Pattern EMBEDDED_RECIPE_ASK = Pattern.compile(
+            "\\?\\s*$|\\b(?:what|which|any|got\\s+any)\\b.{0,25}\\b(?:make|cook|recipe|dish|dinner|"
+                    + "meal|eat)\\b|\\b(?:recipe|dish|meal)\\s+(?:for|with|using)\\b|"
+                    + "\\bcan\\s+(?:i|you|we)\\b.{0,25}\\b(?:make|cook)\\b|\\b(?:suggest|recommend)\\b",
+            Pattern.CASE_INSENSITIVE);
+
     /** Leading "2", "2.5", "2 lbs", "a dozen" before the ingredient name, e.g. "2 lbs chicken". */
     private static final Pattern LEADING_QUANTITY =
             Pattern.compile("^(\\d+(?:\\.\\d+)?)\\s*([a-zA-Z]{1,10})?\\s+(.+)$");
@@ -67,17 +83,21 @@ public class PantryCommandDetector {
             return Optional.of(withQuantity(PantryCommandType.REMOVE, remove.group(1)));
         }
 
-        Matcher bought = BOUGHT.matcher(trimmed);
-        if (bought.matches()) {
-            return Optional.of(withQuantity(PantryCommandType.ADD, bought.group(1)));
-        }
-        Matcher have = HAVE.matcher(trimmed);
-        if (have.matches()) {
-            return Optional.of(withQuantity(PantryCommandType.ADD, have.group(1)));
-        }
-        Matcher add = ADD.matcher(trimmed);
-        if (add.matches()) {
-            return Optional.of(withQuantity(PantryCommandType.ADD, add.group(1)));
+        boolean looksLikeRecipeAsk = EMBEDDED_RECIPE_ASK.matcher(trimmed).find();
+
+        if (!looksLikeRecipeAsk) {
+            Matcher bought = BOUGHT.matcher(trimmed);
+            if (bought.matches()) {
+                return Optional.of(withQuantity(PantryCommandType.ADD, bought.group(1)));
+            }
+            Matcher have = HAVE.matcher(trimmed);
+            if (have.matches()) {
+                return Optional.of(withQuantity(PantryCommandType.ADD, have.group(1)));
+            }
+            Matcher add = ADD.matcher(trimmed);
+            if (add.matches()) {
+                return Optional.of(withQuantity(PantryCommandType.ADD, add.group(1)));
+            }
         }
 
         return Optional.empty();
