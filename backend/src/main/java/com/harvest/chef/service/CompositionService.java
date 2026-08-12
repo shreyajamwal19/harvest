@@ -29,6 +29,7 @@ import com.harvest.chef.reasoning.ChefReasoningResult;
 import com.harvest.chef.reasoning.ChefReasoningService;
 import com.harvest.chef.reasoning.ReasoningMode;
 import com.harvest.chef.retrieval.FollowUpIntentDetector;
+import com.harvest.chef.retrieval.FollowUpTargetResolver;
 import com.harvest.chef.retrieval.RetrievalPlanningService;
 import com.harvest.chef.service.composer.RecipeComposer;
 import com.harvest.chef.service.composer.TechniqueAnswerComposer;
@@ -61,6 +62,7 @@ import java.util.Optional;
 public class CompositionService {
 
     private final FollowUpIntentDetector followUpIntentDetector;
+    private final FollowUpTargetResolver followUpTargetResolver;
     private final ChefReasoningService chefReasoningService;
     private final RetrievalPlanningService retrievalPlanningService;
     private final RecipeComposer recipeComposer;
@@ -217,23 +219,40 @@ public class CompositionService {
             return Optional.empty();
         }
 
-        // Phase 7 (Part 2) - a nutrition question about the shown recipe is answered with real
-        // USDA data, not the LLM's own guess. Checked before the general follow-up classifier
-        // for the same reason Phase 6A/6B's deterministic commands are checked before
-        // retrieval: a more specific, groundable question always wins over a generic catch-all.
-        Optional<NutritionQuestionType> nutritionQuestion =
-                nutritionQuestionDetector.detect(context.getCurrentMessage());
-        if (nutritionQuestion.isPresent()) {
-            return Optional.of(nutritionQuestionComposer.compose(nutritionQuestion.get(), previouslyShown.get(0)));
-        }
-
         Optional<ReasoningMode> mode = followUpIntentDetector.classify(context.getCurrentMessage());
         if (mode.isEmpty()) {
             return Optional.empty();
         }
 
+        // Reference resolution - "the second one", "recipe 2", "the last one", "the chicken
+        // one" - narrows which of several previously-shown recipes this turn is actually about,
+        // so both the reasoning grounding and the recipe(s) echoed back reflect only the one the
+        // user meant, not the whole set. Never attempted for RECIPE_COMPARISON, which is only
+        // coherent across the full shown set. When resolution is ambiguous (or the message has
+        // no such reference at all), this deliberately falls back to the full previously-shown
+        // list rather than guess - identical to the pre-existing behavior.
+        List<RecipeResponse> groundingRecipes = (mode.get() == ReasoningMode.RECIPE_COMPARISON)
+                ? previouslyShown
+                : followUpTargetResolver.resolve(context.getCurrentMessage(), previouslyShown)
+                        .map(List::of)
+                        .orElse(previouslyShown);
+
+        // Phase 7 (Part 2) - a nutrition question about the shown recipe is answered with real
+        // USDA data, not the LLM's own guess. Checked before the general follow-up classifier
+        // for the same reason Phase 6A/6B's deterministic commands are checked before
+        // retrieval: a more specific, groundable question always wins over a generic catch-all.
+        // Uses whichever recipe reference resolution already narrowed to, so "how many calories
+        // does the chicken one have" is answered about the chicken recipe, not just whichever
+        // recipe happened to be shown first.
+        Optional<NutritionQuestionType> nutritionQuestion =
+                nutritionQuestionDetector.detect(context.getCurrentMessage());
+        if (nutritionQuestion.isPresent()) {
+            return Optional.of(
+                    nutritionQuestionComposer.compose(nutritionQuestion.get(), groundingRecipes.get(0)));
+        }
+
         Optional<ChefReasoningResult> reasoning =
-                chefReasoningService.reasonAboutFollowUp(context, mode.get(), previouslyShown);
+                chefReasoningService.reasonAboutFollowUp(context, mode.get(), groundingRecipes);
         if (reasoning.isEmpty()) {
             // The reasoning layer is what makes a follow-up turn meaningful (adapting/comparing/
             // coaching on the shown recipe(s) in prose) - without it, there's nothing useful to
@@ -248,7 +267,7 @@ public class CompositionService {
         return Optional.of(ChefResponse.builder()
                 .type(ChefResponseType.RECIPE)
                 .message(reasoning.get().getMessage())
-                .recipes(previouslyShown)
+                .recipes(groundingRecipes)
                 .build());
     }
 }
