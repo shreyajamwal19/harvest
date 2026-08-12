@@ -26,8 +26,22 @@ import java.util.regex.Pattern;
 @Slf4j
 public class PreferenceLearningService {
 
-    /** One statement -> preference mapping this service recognized in a message. */
-    public record LearnedPreference(PreferenceCategory category, String value, boolean positive) {
+    /**
+     * One statement -> preference mapping this service recognized in a message.
+     *
+     * @param contradictsOpposite true only for a newly-stated restriction/intolerance/allergy
+     *                            ("I can't eat X anymore", "I'm allergic to X") - a signal
+     *                            strong enough that it should actively override any existing
+     *                            opposite-polarity preference for the same value, not just sit
+     *                            beside it. An ordinary "I don't like X" does not set this; a
+     *                            passing taste dislike shouldn't erase a previously stated love
+     *                            of X, but a stated new inability to eat X should.
+     */
+    public record LearnedPreference(PreferenceCategory category, String value, boolean positive,
+                                     boolean contradictsOpposite) {
+        public LearnedPreference(PreferenceCategory category, String value, boolean positive) {
+            this(category, value, positive, false);
+        }
     }
 
     private static final List<String> STOPWORDS_TO_TRIM =
@@ -41,6 +55,16 @@ public class PreferenceLearningService {
                     Pattern.CASE_INSENSITIVE);
     private static final Pattern DONT_EAT_PATTERN =
             Pattern.compile("\\bi\\s+don'?t\\s+eat\\s+([a-z ]{2,40}?)(?:[.!,]|$)", Pattern.CASE_INSENSITIVE);
+    // A NEW inability/intolerance/allergy, distinct from a simple taste dislike (HATE_PATTERN) -
+    // "I can't eat shellfish anymore" or "I'm allergic to peanuts" is often safety-relevant and,
+    // critically, frequently CONTRADICTS an earlier positive statement about the same ingredient
+    // ("I love shellfish" said last month). Handled as its own pattern (rather than folded into
+    // HATE_PATTERN) so UserProfileService can react to it as an explicit contradiction, not just
+    // another ordinary dislike.
+    private static final Pattern NEW_RESTRICTION_PATTERN = Pattern.compile(
+            "\\bi\\s+(?:can'?t|cannot|am unable to)\\s+eat\\s+([a-z ]{2,40}?)(?:\\s+anymore)?(?:[.!,]|$)"
+                    + "|\\bi'?m\\s+(?:allergic|intolerant)\\s+to\\s+([a-z ]{2,40}?)(?:[.!,]|$)",
+            Pattern.CASE_INSENSITIVE);
     private static final Pattern QUICK_MEALS_PATTERN =
             Pattern.compile("\\bi\\s+prefer\\s+(quick|fast|easy|slow|elaborate)\\s+(?:meals|cooking|recipes)\\b",
                     Pattern.CASE_INSENSITIVE);
@@ -79,6 +103,15 @@ public class PreferenceLearningService {
         if (dontEat.find()) {
             learned.add(new LearnedPreference(PreferenceCategory.DISLIKED_INGREDIENT,
                     normalize(dontEat.group(1)), false));
+        }
+
+        Matcher newRestriction = NEW_RESTRICTION_PATTERN.matcher(message);
+        if (newRestriction.find()) {
+            String raw = firstNonNullGroup(newRestriction);
+            if (raw != null) {
+                learned.add(new LearnedPreference(PreferenceCategory.DISLIKED_INGREDIENT,
+                        normalize(raw), false, true));
+            }
         }
 
         Matcher quick = QUICK_MEALS_PATTERN.matcher(message);
@@ -129,6 +162,8 @@ public class PreferenceLearningService {
         for (LearnedPreference lp : learned) {
             if (lp.positive()) {
                 profileService.reinforce(userId, lp.category(), lp.value(), PreferenceSource.EXPLICIT);
+            } else if (lp.contradictsOpposite()) {
+                profileService.weakenAsContradiction(userId, lp.category(), lp.value(), PreferenceSource.EXPLICIT);
             } else {
                 profileService.weaken(userId, lp.category(), lp.value(), PreferenceSource.EXPLICIT);
             }

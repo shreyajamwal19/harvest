@@ -30,11 +30,22 @@ public class UserProfileService {
 
     /** How much a single new signal moves confidence toward its target. Deliberately small. */
     private static final double LEARNING_RATE = 0.1;
+    // An explicit contradiction ("I can't eat X anymore" after previously "I love X") needs to
+    // move confidence in the OLD, opposite-polarity preference down fast, not decay it at the
+    // same slow rate ordinary reinforcement uses - a stale strong preference should not keep
+    // outweighing a new explicit statement for many turns. Still not an instant jump to 0 (an
+    // EMA, same mechanism as everything else here), just a much larger step.
+    private static final double CONTRADICTION_LEARNING_RATE = 0.7;
     private static final double EXPLICIT_TARGET_POSITIVE = 0.95;
     private static final double INFERRED_TARGET_POSITIVE = 0.75;
     private static final double MIN_CONFIDENCE = 0.05;
     private static final double MAX_CONFIDENCE = 0.99;
     private static final int RECENT_HISTORY_LIMIT = 20;
+
+    /** category -> the category holding its opposite-polarity preference for the same value. */
+    private static final java.util.Map<PreferenceCategory, PreferenceCategory> OPPOSITE_CATEGORY = java.util.Map.of(
+            PreferenceCategory.DISLIKED_INGREDIENT, PreferenceCategory.FAVORITE_INGREDIENT,
+            PreferenceCategory.FAVORITE_INGREDIENT, PreferenceCategory.DISLIKED_INGREDIENT);
 
     private final UserPreferenceRepository preferenceRepository;
     private final RecipeHistoryRepository historyRepository;
@@ -91,17 +102,48 @@ public class UserProfileService {
     @Transactional
     public void reinforce(Long userId, PreferenceCategory category, String value, PreferenceSource source) {
         upsert(userId, category, value, source,
-                source == PreferenceSource.EXPLICIT ? EXPLICIT_TARGET_POSITIVE : INFERRED_TARGET_POSITIVE);
+                source == PreferenceSource.EXPLICIT ? EXPLICIT_TARGET_POSITIVE : INFERRED_TARGET_POSITIVE,
+                LEARNING_RATE);
     }
 
     /** Blends a negative/contradicting signal - confidence decays toward zero, never deleted outright. */
     @Transactional
     public void weaken(Long userId, PreferenceCategory category, String value, PreferenceSource source) {
-        upsert(userId, category, value, source, 0.0);
+        upsert(userId, category, value, source, 0.0, LEARNING_RATE);
+    }
+
+    /**
+     * Like {@link #weaken}, but for a statement strong enough to actively contradict an existing
+     * opposite-polarity preference for the same value (e.g. a newly stated "I can't eat X
+     * anymore" against a previously stored "loves X") - so the new signal wins quickly rather
+     * than needing many repeated statements to overcome a stale, previously-confident preference.
+     * Only meaningful for EXPLICIT statements; PreferenceLearningService never sets this flag for
+     * merely-inferred/behavioral signals.
+     */
+    @Transactional
+    public void weakenAsContradiction(Long userId, PreferenceCategory category, String value,
+                                       PreferenceSource source) {
+        upsert(userId, category, value, source, 0.0, CONTRADICTION_LEARNING_RATE);
+
+        PreferenceCategory opposite = OPPOSITE_CATEGORY.get(category);
+        if (opposite != null && userId != null && value != null && !value.isBlank()) {
+            String normalized = value.trim().toLowerCase(Locale.ROOT);
+            preferenceRepository.findByUserIdAndCategoryAndValue(userId, opposite, normalized)
+                    .ifPresent(existing -> {
+                        double previous = existing.getConfidence();
+                        double blended = Math.max(MIN_CONFIDENCE,
+                                previous + CONTRADICTION_LEARNING_RATE * (0.0 - previous));
+                        existing.setConfidence(blended);
+                        preferenceRepository.save(existing);
+                        log.info("[personalization] contradiction override userId={} category={} value='{}' "
+                                        + "{}->{} (opposing new statement in category={})",
+                                userId, opposite, normalized, round(previous), round(blended), category);
+                    });
+        }
     }
 
     private void upsert(Long userId, PreferenceCategory category, String value, PreferenceSource source,
-                         double target) {
+                         double target, double learningRate) {
         if (userId == null || category == null || value == null || value.isBlank()) {
             return;
         }
@@ -118,7 +160,7 @@ public class UserProfileService {
                         .build());
 
         double previous = preference.getConfidence();
-        double blended = previous + LEARNING_RATE * (target - previous);
+        double blended = previous + learningRate * (target - previous);
         blended = Math.max(MIN_CONFIDENCE, Math.min(MAX_CONFIDENCE, blended));
 
         preference.setConfidence(blended);
