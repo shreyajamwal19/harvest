@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * Deterministically builds a shopping list from a set of recipes: for each recipe, every
@@ -68,14 +69,31 @@ public class ShoppingListService {
         return ShoppingListResponse.builder().categories(categories).build();
     }
 
+    /**
+     * Word-boundary match, not bare substring - mirrors {@code containsAsWord} in
+     * RecipeScoringEngine/RecipeCategoryClassifier. A plain {@code contains} here previously
+     * meant a pantry item like "salt" falsely matched "unsalted butter", or "egg" falsely
+     * matched "eggplant", silently hiding real shopping-list needs.
+     */
     private boolean isAlreadyInPantry(String ingredientLine, List<String> pantryNames) {
         String lower = ingredientLine.toLowerCase(Locale.ROOT);
         for (String pantryName : pantryNames) {
-            if (lower.contains(pantryName)) {
+            if (containsAsWord(lower, pantryName)) {
                 return true;
             }
         }
         return false;
+    }
+
+    private boolean containsAsWord(String haystack, String needle) {
+        if (needle == null || needle.isBlank()) {
+            return false;
+        }
+        String needleLower = needle.toLowerCase(Locale.ROOT);
+        if (needleLower.contains(" ")) {
+            return haystack.contains(needleLower);
+        }
+        return Pattern.compile("\\b" + Pattern.quote(needleLower) + "\\b").matcher(haystack).find();
     }
 
     private String normalize(String ingredientLine) {

@@ -7,6 +7,7 @@ import java.util.EnumMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * Deterministic ingredient -> {@link PantryCategory} inference, in the
@@ -58,11 +59,25 @@ public class PantryCategorizer {
         String lower = rawIngredientText.toLowerCase(Locale.ROOT);
         for (Map.Entry<PantryCategory, Set<String>> entry : KEYWORDS.entrySet()) {
             for (String keyword : entry.getValue()) {
-                if (lower.contains(keyword)) {
+                if (containsAsWord(lower, keyword)) {
                     return entry.getKey();
                 }
             }
         }
         return PantryCategory.OTHER;
+    }
+
+    /**
+     * Word-boundary match for single-word keywords, substring for multi-word ones (a
+     * word-boundary regex can't span an embedded space naturally). A bare {@code contains}
+     * here previously miscategorized things like "pepperoni" as VEGETABLE (it contains
+     * "pepper") - the same false-positive-substring problem fixed elsewhere in the pipeline
+     * (RecipeScoringEngine, RecipeCategoryClassifier, ShoppingListService).
+     */
+    private boolean containsAsWord(String haystack, String keyword) {
+        if (keyword.contains(" ")) {
+            return haystack.contains(keyword);
+        }
+        return Pattern.compile("\\b" + Pattern.quote(keyword) + "\\b").matcher(haystack).find();
     }
 }
