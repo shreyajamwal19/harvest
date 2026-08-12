@@ -79,6 +79,14 @@ public class RecipeScoringEngine {
     /** Smart Variety - a soft penalty only, never a hard exclusion. */
     private static final double WEIGHT_SMART_VARIETY = 0.05;
 
+    // Deliberately far larger than WEIGHT_PERSONALIZATION: a dietary restriction is safety/
+    // standing-constraint-relevant (Ω-2 Part 16), not a taste nudge, so unlike favorite/disliked
+    // ingredients it must not be able to lose out to a strong ingredient-match score. Scaled by
+    // the preference's own confidence so a low-confidence/inferred restriction still applies but
+    // less forcefully than a confidently-known, EXPLICIT one - see personalizationScore's
+    // header comment for why this lives outside the blended [-1,1] average.
+    private static final double WEIGHT_DIETARY_RESTRICTION = 1.2;
+
     // Phase 7 - explicitly negated ingredients from the CURRENT message ("no mushrooms").
     // Deliberately the largest single weight in the engine: this is the user's own explicit
     // intent for the request being answered right now, so it should reliably outrank
@@ -355,11 +363,16 @@ public class RecipeScoringEngine {
 
         double personalization = personalizationScore(candidate, profile);
         double varietyPenalty = smartVarietyPenalty(candidate, profile);
+        double dietaryPenalty = dietaryRestrictionPenalty(candidate, profile);
         double total = base.total() + WEIGHT_PERSONALIZATION * personalization
-                - WEIGHT_SMART_VARIETY * varietyPenalty;
+                - WEIGHT_SMART_VARIETY * varietyPenalty
+                - WEIGHT_DIETARY_RESTRICTION * dietaryPenalty;
 
         List<String> explanations = new ArrayList<>(base.explanations());
         addPersonalizationExplanations(explanations, candidate, profile);
+        if (dietaryPenalty > 0) {
+            explanations.add("Heads up: this may not fit a dietary restriction on your profile.");
+        }
 
         return new RecipeScore(candidate, total, base.matchedCount(), base.missingIngredients(), explanations);
     }
@@ -430,10 +443,8 @@ public class RecipeScoringEngine {
                     }
                 }
                 case DIETARY_RESTRICTION -> {
-                    Double conflict = dietaryConflictPenalty(pref.getValue(), combinedText);
-                    if (conflict != null) {
-                        contributions.add(-pref.getConfidence() * conflict);
-                    }
+                    // Handled separately in dietaryRestrictionPenalty at hard-exclusion scale,
+                    // not blended into this soft average - see WEIGHT_DIETARY_RESTRICTION.
                 }
                 case HEALTH_GOAL -> {
                     Double alignment = healthGoalAlignment(pref.getValue(), combinedText);
@@ -455,6 +466,30 @@ public class RecipeScoringEngine {
         }
         double avg = contributions.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
         return Math.max(-1.0, Math.min(1.0, avg));
+    }
+
+    /**
+     * Standing dietary restrictions (Ω-2 Part 16: safety-relevant, not a taste nudge) apply at
+     * WEIGHT_DIETARY_RESTRICTION scale, deliberately kept outside {@link #personalizationScore}'s
+     * blended average so a strong ingredient/title match can never casually outrank a known
+     * restriction the way a soft favorite/dislike signal can. Takes the single worst (highest
+     * confidence x conflict) restriction rather than summing multiple, since this is a penalty
+     * scale, not a preference-strength average - one real conflict is already disqualifying
+     * regardless of how many restrictions happen to be on file.
+     */
+    private double dietaryRestrictionPenalty(RecipeCandidate candidate, UserProfileSnapshot profile) {
+        String combinedText = combinedLowerText(candidate);
+        double worst = 0.0;
+        for (UserProfileSnapshot.PreferenceSignal pref : profile.getPreferences()) {
+            if (pref.getCategory() != PreferenceCategory.DIETARY_RESTRICTION) {
+                continue;
+            }
+            Double conflict = dietaryConflictPenalty(pref.getValue(), combinedText);
+            if (conflict != null) {
+                worst = Math.max(worst, pref.getConfidence() * conflict);
+            }
+        }
+        return worst;
     }
 
     /** Returns 1.0 (hard conflict), a partial value, or null (no conflict / not a recognized diet). */
