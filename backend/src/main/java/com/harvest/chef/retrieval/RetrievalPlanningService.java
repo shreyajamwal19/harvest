@@ -45,7 +45,8 @@ public class RetrievalPlanningService {
     // Small, local keyword sets used only for rule-based classification - not a
     // separate reasoning framework, just inline heuristics for this one stage.
     private static final List<String> TECHNIQUE_KEYWORDS = List.of(
-            "why", "how do i fix", "how does", "went wrong", "split", "curdled", "curdle",
+            "why did", "why is my", "why does my", "why isnt", "why wont", "why is it",
+            "how do i fix", "how does", "went wrong", "split", "curdled", "curdle",
             "dense", "burnt", "burn", "overcooked", "undercooked", "soggy", "tough",
             "deflated", "sunk", "sank", "rubbery", "grainy", "separated", "lumpy",
             "raw in the middle", "help my", "fix my"
