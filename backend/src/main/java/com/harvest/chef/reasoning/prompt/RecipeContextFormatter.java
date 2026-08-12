@@ -73,9 +73,15 @@ public final class RecipeContextFormatter {
             // If the user refers to one positionally ("the second one", "recipe 2", "the last
             // one") rather than by name, resolve it against the numbering above - don't ask
             // them to repeat which recipe they mean when the numbering already answers it.
+            // Only reached when CompositionService's own deterministic FollowUpTargetResolver
+            // couldn't confidently narrow it first (e.g. an ambiguous descriptor matching more
+            // than one shown recipe) - this is the fallback, not the primary resolution path.
             prompt.append("(If the user refers to a recipe by position rather than name - "
                     + "\"the first one\", \"the second one\", \"recipe 2\", \"the last one\" - "
-                    + "match it to the corresponding numbered item above.)\n");
+                    + "match it to the corresponding numbered item above. If they refer to it by a "
+                    + "descriptive word instead - \"the chicken one\", \"the pasta one\" - match it to "
+                    + "whichever numbered item's title or ingredients actually contains that word; if "
+                    + "more than one could match, ask which one they mean rather than guessing.)\n");
         }
     }
 
