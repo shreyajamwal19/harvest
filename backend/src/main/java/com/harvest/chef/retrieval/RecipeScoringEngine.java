@@ -84,7 +84,17 @@ public class RecipeScoringEngine {
     // intent for the request being answered right now, so it should reliably outrank
     // everything else (personalization, pantry, popularity) without being an outright hard
     // filter that could zero out every candidate and produce nothing.
-    private static final double WEIGHT_EXCLUSION = 0.5;
+    // A "no nuts"/"avoid dairy" exclusion is a hard user constraint, not a soft preference -
+    // the doc comment on the call site already says it's "never suppressed by anything else
+    // in the plan," but the previous weight (0.5) couldn't actually guarantee that: every
+    // other WEIGHT_* constant above sums to roughly ~1.07 at their combined maximum, so a
+    // recipe with a near-perfect ingredient/title/intent match could still outrank a mediocre
+    // non-excluded alternative even while containing something the user explicitly excluded.
+    // 1.5 makes a single exclusion hit (penalty >= 0.7 -> subtraction >= 1.05) reliably larger
+    // than that entire achievable range, so an excluded-ingredient recipe only ever surfaces
+    // when literally nothing else is available - graceful degradation is preserved (nothing
+    // is hard-filtered out of the candidate list) while exclusion effectively dominates ranking.
+    private static final double WEIGHT_EXCLUSION = 1.5;
 
     // Phase 6B - pantry-awareness signals. Same additive philosophy: small weights, the
     // current request's own ingredient/intent signals always dominate.
