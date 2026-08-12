@@ -4,6 +4,7 @@ package com.harvest.chef.personalization.service;
 public enum MemoryCommandType {
     REMEMBER_LIKE,
     REMEMBER_DISLIKE,
+    REMEMBER_GENERAL,
     FORGET,
     SHOW_PREFERENCES,
     SHOW_HISTORY,

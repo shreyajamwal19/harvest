@@ -25,6 +25,7 @@ import java.util.stream.Collectors;
 public class MemoryCommandService {
 
     private final UserProfileService userProfileService;
+    private final PreferenceLearningService preferenceLearningService;
 
     public ChefResponse execute(Long userId, MemoryCommand command) {
         log.info("[personalization] memory command userId={} type={} argument='{}'",
@@ -33,12 +34,39 @@ public class MemoryCommandService {
         return switch (command.type()) {
             case REMEMBER_LIKE -> remember(userId, command.argument(), true);
             case REMEMBER_DISLIKE -> remember(userId, command.argument(), false);
+            case REMEMBER_GENERAL -> rememberGeneral(userId, command.argument());
             case FORGET -> forget(userId, command.argument());
             case SHOW_PREFERENCES -> showPreferences(userId);
             case SHOW_HISTORY -> showHistory(userId);
             case RESET_PROFILE -> resetProfile(userId);
             case CLEAR_HISTORY -> clearHistory(userId);
         };
+    }
+
+    /**
+     * Handles a "remember ..." command that wasn't phrased as a simple like/dislike -
+     * "remember I am vegetarian", "remember I'm allergic to peanuts", "remember I'm trying to
+     * lose weight". Reuses PreferenceLearningService's existing statement patterns rather than
+     * a second copy, and - critically - only ever confirms what was ACTUALLY captured; an
+     * explicit command that doesn't match any recognized statement shape is told so honestly
+     * instead of a hollow "Got it," since claiming to remember something that wasn't actually
+     * stored is worse than admitting the limitation.
+     */
+    private ChefResponse rememberGeneral(Long userId, String argument) {
+        if (argument == null || argument.isBlank()) {
+            return update("I didn't catch what to remember - try \"remember that I like tofu\" or "
+                    + "\"remember I'm vegetarian\", for example.");
+        }
+        List<PreferenceLearningService.LearnedPreference> learned =
+                preferenceLearningService.learnFromMessage(userProfileService, userId, argument);
+        if (learned.isEmpty()) {
+            return update("I couldn't tell what specifically to remember from that - try phrasing it like "
+                    + "\"I'm vegetarian\", \"I don't eat shellfish\", or \"I love garlic\".");
+        }
+        String summary = learned.stream()
+                .map(lp -> (lp.positive() ? "you like " : "you don't do ") + lp.value())
+                .collect(Collectors.joining("; "));
+        return update("Got it - I'll remember that " + summary + ".");
     }
 
     private ChefResponse remember(Long userId, String argument, boolean positive) {
