@@ -155,7 +155,7 @@ public class UserProfileService {
                         .userId(userId)
                         .category(category)
                         .value(normalized)
-                        .confidence(0.5)
+                        .confidence(initialConfidence(category, source, target))
                         .source(source)
                         .build());
 
@@ -200,5 +200,21 @@ public class UserProfileService {
 
     private double round(double value) {
         return Math.round(value * 100.0) / 100.0;
+    }
+
+    /**
+     * Seeds a brand-new preference's starting confidence. Most categories start neutral (0.5)
+     * and earn confidence gradually via the EMA in {@link #upsert} - a single "I love garlic"
+     * shouldn't instantly dominate ranking (Ω-2 Part 5). A DIETARY_RESTRICTION stated explicitly
+     * is different in kind: "I'm vegetarian" is a declarative fact, not a graded taste signal
+     * that legitimately benefits from repeated confirmation, and understating it while it slowly
+     * ramps up is a worse failure mode than a taste preference ramping up slowly. So an explicit
+     * dietary restriction starts already near its target rather than at neutral.
+     */
+    private double initialConfidence(PreferenceCategory category, PreferenceSource source, double target) {
+        if (category == PreferenceCategory.DIETARY_RESTRICTION && source == PreferenceSource.EXPLICIT) {
+            return target;
+        }
+        return 0.5;
     }
 }
