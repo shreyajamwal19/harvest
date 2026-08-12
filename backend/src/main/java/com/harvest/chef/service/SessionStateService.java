@@ -47,6 +47,11 @@ public class SessionStateService {
             session.setLastSearchQuery(plan.getSearchQuery());
             session.setLastMentionedIngredients(plan.getMentionedIngredients() == null
                     ? "" : String.join(",", plan.getMentionedIngredients()));
+            // Persist exclusions too - otherwise a later "show me more" continuation turn
+            // (buildContinuationPlan) has no way to know the user ever said "no nuts" /
+            // "avoid dairy" and could resurface exactly what they excluded.
+            session.setLastExcludedIngredients(plan.getExcludedIngredients() == null
+                    ? "" : String.join(",", plan.getExcludedIngredients()));
 
             if (recipes != null && !recipes.isEmpty()) {
                 session.setShownRecipeTitles(appendShownTitles(session.getShownRecipeTitles(), recipes));

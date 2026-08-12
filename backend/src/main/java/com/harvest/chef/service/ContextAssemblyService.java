@@ -56,6 +56,7 @@ public class ContextAssemblyService {
                 .recentTurns(recentTurns)
                 .lastSearchQuery(session.getLastSearchQuery())
                 .lastMentionedIngredients(splitCsv(session.getLastMentionedIngredients()))
+                .lastExcludedIngredients(splitCsv(session.getLastExcludedIngredients()))
                 .shownRecipeTitles(splitPipe(session.getShownRecipeTitles()))
                 .lastShownRecipes(deserializeRecipes(session.getLastShownRecipesJson()))
                 // Phase 6A - loaded once per turn; never throws, falls back to an empty

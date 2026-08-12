@@ -20,6 +20,8 @@ public class ConversationContext {
     private String lastSearchQuery;
     /** The ingredients behind the session's last recipe request - reused on "more" turns. */
     private List<String> lastMentionedIngredients;
+    /** The excluded terms ("no nuts") behind the session's last recipe request - reused on "more" turns. */
+    private List<String> lastExcludedIngredients;
     /** Normalized titles already shown to the user this session, so "more" doesn't repeat them. */
     private Set<String> shownRecipeTitles;
     /**

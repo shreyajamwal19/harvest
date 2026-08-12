@@ -45,6 +45,14 @@ public class ConversationSession {
     @Column(name = "last_mentioned_ingredients", columnDefinition = "TEXT")
     private String lastMentionedIngredients;
 
+    /**
+     * Comma-separated excluded terms ("no nuts", "avoid dairy") behind the most recent recipe
+     * request. Without persisting this, a later "show me more" continuation turn would silently
+     * drop the user's exclusion and could resurface exactly what they said to avoid.
+     */
+    @Column(name = "last_excluded_ingredients", columnDefinition = "TEXT")
+    private String lastExcludedIngredients;
+
     /** Pipe-separated, lowercased titles already shown this session (bounded, most-recent-kept). */
     @Column(name = "shown_recipe_titles", columnDefinition = "TEXT")
     private String shownRecipeTitles;

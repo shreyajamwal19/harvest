@@ -317,6 +317,8 @@ public class RetrievalPlanningService {
     private RetrievalPlan buildContinuationPlan(ConversationContext context) {
         List<String> lastIngredients = context.getLastMentionedIngredients();
         String lastQuery = context.getLastSearchQuery();
+        List<String> lastExcluded = context.getLastExcludedIngredients() == null
+                ? List.of() : context.getLastExcludedIngredients();
 
         boolean hasPriorContext = (lastIngredients != null && !lastIngredients.isEmpty())
                 || (lastQuery != null && !lastQuery.isBlank());
@@ -334,7 +336,7 @@ public class RetrievalPlanningService {
                     .continuation(false)
                     .synonymResolvedIngredients(List.of())
                     .preferenceTags(Set.of())
-                    .excludedIngredients(List.of())
+                    .excludedIngredients(lastExcluded)
                     .build();
         }
 
@@ -351,7 +353,7 @@ public class RetrievalPlanningService {
                 .continuation(true)
                 .synonymResolvedIngredients(List.of())
                 .preferenceTags(Set.of())
-                .excludedIngredients(List.of())
+                .excludedIngredients(lastExcluded)
                 .build();
     }
 
