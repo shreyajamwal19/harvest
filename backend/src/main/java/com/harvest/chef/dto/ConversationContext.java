@@ -10,7 +10,7 @@ import java.util.Set;
 
 /** Output of the Context Assembly stage. Everything downstream reads from this. */
 @Getter
-@Builder
+@Builder(toBuilder = true)
 public class ConversationContext {
     private Long sessionId;
     private Long userId;

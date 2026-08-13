@@ -113,14 +113,27 @@ public class CompositionService {
             return followUp.get();
         }
 
-        RetrievalPlan plan = retrievalPlanningService.plan(context);
+        // Learn from this message BEFORE planning/scoring, not after - "I'm vegetarian, what can
+        // I make with what I have?" must have its own dietary restriction apply to THIS turn's
+        // recommendations, not only turns after it. Refreshing the in-flight context (rather
+        // than just persisting to the DB and moving on with the stale snapshot already loaded
+        // in Context Assembly) is what makes that possible; without this, a same-turn explicit
+        // statement had no effect on its own turn's recipe ranking - a real contradiction risk
+        // (Ω-2 Part 16), not just a delay.
+        List<LearnedPreference> learned = preferenceLearningService
+                .learnFromMessage(userProfileService, context.getUserId(), context.getCurrentMessage());
+        ConversationContext effectiveContext = learned.isEmpty()
+                ? context
+                : context.toBuilder().userProfile(userProfileService.loadSnapshot(context.getUserId())).build();
+
+        RetrievalPlan plan = retrievalPlanningService.plan(effectiveContext);
 
         ChefResponse response = switch (plan.getIntent()) {
-            case TECHNIQUE -> techniqueAnswerComposer.compose(context, plan);
-            case RECIPE -> recipeComposer.compose(context, plan);
+            case TECHNIQUE -> techniqueAnswerComposer.compose(effectiveContext, plan);
+            case RECIPE -> recipeComposer.compose(effectiveContext, plan);
         };
 
-        return acknowledgeAnyLearnedPreferences(context, response);
+        return acknowledgeLearnedPreferences(learned, response);
     }
 
     /** MEAL_PLANNING - the deterministic engine chooses every day's recipe; see MealPlanningService. */
@@ -183,14 +196,11 @@ public class CompositionService {
     }
 
     /**
-     * Passive/explicit preference learning from ordinary conversation (not a memory command) -
-     * "I love spicy food", "I'm vegetarian", etc. Runs after composition so the normal
-     * recipe/technique response is never delayed or altered by it; if anything was learned, a
-     * short natural acknowledgment is appended to the message that's already been composed.
+     * Appends a short natural acknowledgment for whatever was learned earlier this same turn
+     * (see the learn-before-plan step in {@link #compose}) - kept as a separate step so the
+     * normal recipe/technique response text is composed first and this only ever adds to it.
      */
-    private ChefResponse acknowledgeAnyLearnedPreferences(ConversationContext context, ChefResponse response) {
-        List<LearnedPreference> learned = preferenceLearningService
-                .learnFromMessage(userProfileService, context.getUserId(), context.getCurrentMessage());
+    private ChefResponse acknowledgeLearnedPreferences(List<LearnedPreference> learned, ChefResponse response) {
         if (learned.isEmpty()) {
             return response;
         }
