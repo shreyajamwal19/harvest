@@ -177,11 +177,26 @@ public class RetrievalPlanningService {
     private Set<String> detectPreferenceTags(String lower) {
         Set<String> tags = new LinkedHashSet<>();
         for (Map.Entry<String, Set<String>> entry : PREFERENCE_KEYWORDS.entrySet()) {
-            if (entry.getValue().stream().anyMatch(lower::contains)) {
+            if (entry.getValue().stream().anyMatch(phrase -> containsPhrase(lower, phrase))) {
                 tags.add(entry.getKey());
             }
         }
         return tags;
+    }
+
+    /**
+     * Whole-word matching for single-word preference phrases (multi-word phrases already can't
+     * false-positive on an embedded space the same way, so they keep the plain substring check -
+     * same tradeoff RecipeCategoryClassifier/RecipeScoringEngine's own containsAsWord makes).
+     * Without this, single-word tags like "easy" or "spicy" could in principle match inside an
+     * unrelated longer word; word-boundary matching removes that class of false positive here
+     * the same way it already was fixed in RecipeScoringEngine's keyword matching.
+     */
+    private boolean containsPhrase(String haystack, String phrase) {
+        if (phrase.contains(" ")) {
+            return haystack.contains(phrase);
+        }
+        return Pattern.compile("\\b" + Pattern.quote(phrase) + "\\b").matcher(haystack).find();
     }
 
     // Regional/synonym ingredient names mapped to the word the imported
