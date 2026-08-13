@@ -610,7 +610,7 @@ public class RecipeScoringEngine {
             }
             boolean favorite = pref.getCategory() == PreferenceCategory.FAVORITE_INGREDIENT
                     || pref.getCategory() == PreferenceCategory.FAVORITE_CUISINE;
-            if (!addedFavorite && favorite && containsAsWord(combinedText, pref.getValue())) {
+            if (!addedFavorite && favorite && matchesPreferenceValue(combinedText, pref.getValue())) {
                 explanations.add("Matches something you like: " + pref.getValue() + ".");
                 addedFavorite = true; // one favorite callout is plenty - avoid a wall of explanations
             }
