@@ -67,9 +67,18 @@ public class FollowUpIntentDetector {
             "cook for one", "cook for two", "cook for four", "cook for six", "cook for eight",
             "cook for ten", "cook for twelve", "without the", "without", "leave out the",
             "swap the", "substitute the", "instead of the", "instead", "replace butter",
-            "replace the", "lower calories", "higher protein", "what if i remove",
+            "replace the", "remove the", "lower calories", "higher protein", "what if i remove",
             "what if i dont have"
     );
+
+    // "add chicken", "add more garlic" - bare "add" is unambiguous here for the same reason bare
+    // "without"/"instead" are above: this detector is only ever consulted when a prior recipe
+    // already exists in session state, so within that scope "add X" is virtually always asking
+    // to add X to that recipe, not a fresh unrelated request. Kept as its own prefix check
+    // (rather than folded into ADAPTATION_PHRASES's contains-anywhere matching) so it only fires
+    // when "add" leads the message, not merely appears in it ("what should I add to my grocery
+    // list" - unrelated - vs "add mushrooms" - a modification).
+    private static final Pattern ADD_INGREDIENT_PREFIX = Pattern.compile("^\\s*(?:can\\s+(?:i|you)\\s+)?add\\s+\\S");
 
     // Modifier concepts that only make sense applied to something already on the table -
     // deliberately NOT matched on their own (e.g. bare "vegetarian" also shows up in fresh
@@ -141,6 +150,9 @@ public class FollowUpIntentDetector {
             return Optional.of(ReasoningMode.RECIPE_COMPARISON);
         }
         if (ADAPTATION_PHRASES.stream().anyMatch(lower::contains)) {
+            return Optional.of(ReasoningMode.RECIPE_ADAPTATION);
+        }
+        if (ADD_INGREDIENT_PREFIX.matcher(lower).find()) {
             return Optional.of(ReasoningMode.RECIPE_ADAPTATION);
         }
         // General negation catch-all: "no mushrooms", "skip the cilantro", "hold the cheese",
