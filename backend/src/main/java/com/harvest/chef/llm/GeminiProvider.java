@@ -10,7 +10,6 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.net.URI;
-import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -51,13 +50,18 @@ public class GeminiProvider extends AbstractLLMProvider {
     protected ProviderCompletion doComplete(String systemPrompt, String userPrompt, int maxTokens) {
         long start = System.currentTimeMillis();
         try {
-            String url = API_BASE + properties.getModel() + ":generateContent?key="
-                    + URLEncoder.encode(properties.getApiKey(), StandardCharsets.UTF_8);
+            // The API key was previously passed as a "?key=" query parameter. Query strings are
+            // routinely captured verbatim by proxies, load balancers, and HTTP client debug/wire
+            // logging, so any of those logging the request URL would leak the credential. Gemini
+            // supports the same auth via the "x-goog-api-key" header instead - functionally
+            // identical, but never appears in a URL that could end up in a log line.
+            String url = API_BASE + properties.getModel() + ":generateContent";
             String requestBody = buildRequestBody(systemPrompt, userPrompt, maxTokens);
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
                     .header("Content-Type", "application/json")
+                    .header("x-goog-api-key", properties.getApiKey())
                     .timeout(Duration.ofSeconds(20))
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
                     .build();
