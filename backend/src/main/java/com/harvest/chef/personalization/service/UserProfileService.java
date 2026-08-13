@@ -180,7 +180,7 @@ public class UserProfileService {
         if (userId == null || valueFragment == null || valueFragment.isBlank()) {
             return 0;
         }
-        int removed = preferenceRepository.deleteByUserIdAndValueContaining(userId,
+        int removed = preferenceRepository.deleteByUserIdAndValueMatching(userId,
                 valueFragment.trim().toLowerCase(Locale.ROOT));
         log.info("[personalization] forget userId={} fragment='{}' removed={}", userId, valueFragment, removed);
         return removed;
