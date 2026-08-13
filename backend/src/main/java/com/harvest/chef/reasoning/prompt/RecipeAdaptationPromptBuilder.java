@@ -30,6 +30,10 @@ public class RecipeAdaptationPromptBuilder {
               remove an ingredient, say what (if anything) compensates for it.
             - If the requested change can't be reasoned about from the recipe(s) below (e.g. it
               refers to a dish never shown), say so honestly instead of guessing.
+            - Do not claim a substitution is nutritionally equivalent, "just as healthy", or
+              equally safe (e.g. for an allergy) unless that's something you can actually
+              reason out from ordinary cooking knowledge - flag real tradeoffs (texture, cook
+              time, flavor, or nutrition) instead of asserting parity you can't verify.
             - Do not mention scores, algorithms, or the pipeline itself.
             """
             + RecipeContextFormatter.VOICE_GUIDANCE
