@@ -353,6 +353,25 @@ public class RecipeScoringEngine {
         return containsAsWord(combinedText, term);
     }
 
+    /**
+     * Same trait-vs-literal distinction as {@link #matchesExcludedTerm}, reused for stored
+     * FAVORITE_INGREDIENT/DISLIKED_INGREDIENT personalization preferences. Without this, a
+     * preference learned from "I love spicy food" (stored as value "spicy" - see
+     * PreferenceLearningService) never contributed anything: recipe text almost never contains
+     * the literal word "spicy", only trait-proxy ingredients like cayenne/jalapeno/sriracha,
+     * so a plain whole-word check against "spicy" silently failed every single time. Personal
+     * taste words that happen to have a richer keyword vocabulary elsewhere in this engine now
+     * resolve against that vocabulary instead; ordinary named ingredients ("mushrooms",
+     * "cilantro") still match literally, unchanged.
+     */
+    private boolean matchesPreferenceValue(String combinedText, String value) {
+        Set<String> traitKeywords = EXCLUDABLE_TRAIT_KEYWORDS.get(value);
+        if (traitKeywords != null) {
+            return containsAny(combinedText, traitKeywords);
+        }
+        return containsAsWord(combinedText, value);
+    }
+
     // ---------------------------------------------------------------- Phase 6A: personalization
 
     /**
@@ -439,12 +458,12 @@ public class RecipeScoringEngine {
         for (UserProfileSnapshot.PreferenceSignal pref : profile.getPreferences()) {
             switch (pref.getCategory()) {
                 case FAVORITE_INGREDIENT, FAVORITE_CUISINE, FAVORITE_MEAL_CATEGORY, FAVORITE_COOKING_METHOD -> {
-                    if (containsAsWord(combinedText, pref.getValue())) {
+                    if (matchesPreferenceValue(combinedText, pref.getValue())) {
                         contributions.add(pref.getConfidence());
                     }
                 }
                 case DISLIKED_INGREDIENT -> {
-                    if (containsAsWord(combinedText, pref.getValue())) {
+                    if (matchesPreferenceValue(combinedText, pref.getValue())) {
                         contributions.add(-pref.getConfidence());
                     }
                 }
