@@ -799,7 +799,10 @@ public class RecipeScoringEngine {
             scores.add(hasAnimalProduct ? 0.05 : 0.9);
         }
         if (tags.contains("low_carb")) {
-            long carbHits = HIGH_CARB_KEYWORDS.stream().filter(text::contains).count();
+            // Whole-word matching matters here: plain substring matching made "flour" a false
+            // positive inside "cauliflower", incorrectly flagging a classic low-carb vegetable
+            // as carb-heavy.
+            long carbHits = HIGH_CARB_KEYWORDS.stream().filter(k -> containsAsWord(text, k)).count();
             scores.add(carbHits >= 2 ? 0.1 : carbHits == 1 ? 0.4 : 0.9);
         }
         if (tags.contains("spicy")) {
@@ -1127,9 +1130,17 @@ public class RecipeScoringEngine {
         return (title + " " + ingredients).toLowerCase(Locale.ROOT);
     }
 
+    /**
+     * Whole-word/whole-phrase containment for every keyword, delegating to
+     * {@link #containsAsWord} - fixes false positives from the previous plain
+     * substring check (e.g. "egg" matching inside "eggplant", "oil" matching
+     * inside "boil"/"foil", "heat" matching inside "wheat", "salted" matching
+     * inside "unsalted"), which was silently corrupting dietary, exclusion,
+     * health-goal, and popularity signals across the engine.
+     */
     private boolean containsAny(String text, Set<String> keywords) {
         for (String keyword : keywords) {
-            if (text.contains(keyword)) {
+            if (containsAsWord(text, keyword)) {
                 return true;
             }
         }
