@@ -97,7 +97,8 @@ public class FollowUpIntentDetector {
             "what should i serve", "serve with", "side dish", "side for", "pair with", "pairing",
             "can i freeze", "does it freeze", "how do i store", "meal prep", "restaurant quality",
             "mistakes should i avoid", "what mistakes", "would you cook this", "can my kids",
-            "kids eat", "my daughter", "my son"
+            "kids eat", "my daughter", "my son", "can i substitute", "substitute this",
+            "substitute that", "substitute for this", "substitution for this"
     );
 
     // Modifier concepts for coaching-flavored questions, again requiring a backreference on
