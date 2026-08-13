@@ -219,6 +219,13 @@ public class RecipeScoringEngine {
     // preference tag already scores against (see dietaryAlignment) rather than a second,
     // separately-maintained list, and this map is where any future trait-word/keyword-set pair
     // would be added, so the exclusion path automatically benefits the same way.
+    //
+    // "oil" is deliberately NOT mapped here: unlike "spicy"/"greasy", "oil" is itself a literal
+    // ingredient word that shows up verbatim in ingredient lists ("2 tbsp olive oil", "vegetable
+    // oil") - routing it through FRIED_OR_HEAVY_KEYWORDS (which contains no literal "oil" term)
+    // meant "no oil" never matched a recipe that plainly listed oil as an ingredient. It falls
+    // through to the literal whole-word check in matchesExcludedTerm instead, same as any other
+    // named ingredient.
     private static final Map<String, Set<String>> EXCLUDABLE_TRAIT_KEYWORDS = Map.ofEntries(
             Map.entry("spicy", SPICY_KEYWORDS),
             Map.entry("spice", SPICY_KEYWORDS),
@@ -240,7 +247,6 @@ public class RecipeScoringEngine {
             Map.entry("sodium", SODIUM_HEAVY_KEYWORDS),
             Map.entry("salt", SODIUM_HEAVY_KEYWORDS),
             Map.entry("fried", FRIED_OR_HEAVY_KEYWORDS),
-            Map.entry("oil", FRIED_OR_HEAVY_KEYWORDS),
             Map.entry("greasy", FRIED_OR_HEAVY_KEYWORDS)
     );
 
@@ -548,7 +554,19 @@ public class RecipeScoringEngine {
             return 0.0;
         }
         String normalizedTitle = candidate.getTitle().trim().toLowerCase(Locale.ROOT);
-        int index = recent.indexOf(normalizedTitle);
+        // recent titles come straight from RecipeHistoryEntry with their original casing/
+        // whitespace, never normalized at the source - comparing them against a normalized
+        // candidate title via indexOf() was always a case-sensitive exact match, so this
+        // penalty silently never fired for any title that wasn't already all-lowercase.
+        // Normalize this side the same way before comparing.
+        int index = -1;
+        for (int i = 0; i < recent.size(); i++) {
+            String title = recent.get(i);
+            if (title != null && title.trim().toLowerCase(Locale.ROOT).equals(normalizedTitle)) {
+                index = i;
+                break;
+            }
+        }
         if (index < 0) {
             return 0.0;
         }
