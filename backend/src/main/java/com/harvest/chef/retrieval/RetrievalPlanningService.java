@@ -44,6 +44,12 @@ public class RetrievalPlanningService {
 
     // Small, local keyword sets used only for rule-based classification - not a
     // separate reasoning framework, just inline heuristics for this one stage.
+    // Checked via containsPhrase (word-boundary for single words) below, not plain substring:
+    // single-word entries like "dense" and "split" were previously matching inside common
+    // ingredient names - "condensed milk" (a real, common baking ingredient) contains "dense",
+    // and "split peas"/"split pea soup" contains "split" - silently misrouting ordinary recipe
+    // requests into TECHNIQUE mode. Likewise NUTRITION_KEYWORDS' "carb" matched inside
+    // "carbonara", spuriously triggering nutrition grounding for every carbonara search.
     private static final List<String> TECHNIQUE_KEYWORDS = List.of(
             "why did", "why is my", "why does my", "why isnt", "why wont", "why is it",
             "how do i fix", "how does", "went wrong", "split", "curdled", "curdle",
@@ -244,7 +250,7 @@ public class RetrievalPlanningService {
             return plan;
         }
 
-        boolean isTechnique = TECHNIQUE_KEYWORDS.stream().anyMatch(lower::contains);
+        boolean isTechnique = TECHNIQUE_KEYWORDS.stream().anyMatch(k -> containsPhrase(lower, k));
         Set<String> synonymResolved = new LinkedHashSet<>();
         List<String> ingredients = extractIngredientsWithSynonymTracking(lower, synonymResolved);
 
@@ -269,8 +275,8 @@ public class RetrievalPlanningService {
         Set<String> preferenceTags = detectPreferenceTags(negationDetector.stripNegatedSpans(message));
 
         boolean needsExternalRecipes = ingredients.isEmpty();
-        boolean needsNutritionGrounding = NUTRITION_KEYWORDS.stream().anyMatch(lower::contains);
-        boolean needsIngredientIntelligence = INGREDIENT_INTELLIGENCE_KEYWORDS.stream().anyMatch(lower::contains);
+        boolean needsNutritionGrounding = NUTRITION_KEYWORDS.stream().anyMatch(k -> containsPhrase(lower, k));
+        boolean needsIngredientIntelligence = INGREDIENT_INTELLIGENCE_KEYWORDS.stream().anyMatch(k -> containsPhrase(lower, k));
 
         String searchQuery = buildSearchQuery(ingredients, preferenceTags);
 
