@@ -88,14 +88,22 @@ public class RecipeEvaluationService {
         return results;
     }
 
+    /**
+     * Previously short-circuited to a generic "Best available match... catalog" filler
+     * whenever no ingredients were mentioned, even when RecipeScoringEngine had already
+     * built real, grounded intent-based explanations (e.g. "Great dinner option.",
+     * "Vegetarian-friendly.") for that exact candidate - discarding genuine reasoning in
+     * favor of filler violates the "explanations must be grounded, not generic" principle.
+     * Now only falls back to filler when there is truly nothing grounded to say.
+     */
     private String buildRationale(RecipeScore score, List<String> mentioned) {
+        if (!score.explanations().isEmpty()) {
+            return String.join(" ", score.explanations());
+        }
         if (mentioned.isEmpty()) {
             return "Best available match for your request from the " + score.candidate().getSource() + " catalog.";
         }
-        if (score.explanations().isEmpty()) {
-            return "A reasonable match for your request.";
-        }
-        return String.join(" ", score.explanations());
+        return "A reasonable match for your request.";
     }
 
     private String normalizeTitle(String title) {
