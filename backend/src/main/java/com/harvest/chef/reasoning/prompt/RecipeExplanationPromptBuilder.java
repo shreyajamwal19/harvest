@@ -30,6 +30,10 @@ public class RecipeExplanationPromptBuilder {
             - NEVER contradict the retrieved metadata (title, ingredients, steps, servings, source).
             - Justify your recommendation: say what makes it a good fit for what they asked (time,
               who they're cooking for, what they want to avoid), not just what it is.
+            - "Key terms detected in the request" may mix genuine pantry items with words that are
+              actually part of a dish name (e.g. "alfredo" in "chicken alfredo"). Never tell the
+              user they "already have" a term unless their own message actually says they have
+              it - read their message to judge which is which.
             - You may briefly compare the given recipes and note trade-offs, but a full side-by-side
               comparison request gets its own dedicated response elsewhere - keep this focused on
               recommending and explaining.
@@ -67,7 +71,16 @@ public class RecipeExplanationPromptBuilder {
         prompt.append("User's latest message: ").append(context.getCurrentMessage()).append('\n');
 
         if (plan.getMentionedIngredients() != null && !plan.getMentionedIngredients().isEmpty()) {
-            prompt.append("Ingredients the user has: ")
+            // Deliberately NOT labeled "ingredients the user has": mentionedIngredients is every
+            // content word extracted from the message, including words that are actually part
+            // of a dish NAME rather than a pantry item - "chicken alfredo" extracts as
+            // ["chicken", "alfredo"], and "alfredo" isn't something the user possesses, it's
+            // half of the dish they're asking for. The old "has" framing produced confidently
+            // wrong lines like "you already have chicken and alfredo" in real responses. This
+            // neutral framing lets the model reason about it correctly using the full message
+            // text above instead of being told a false possession claim as fact.
+            prompt.append("Key terms detected in the request (ingredients on hand and/or dish keywords - ")
+                    .append("read the user's actual message above to tell which is which): ")
                     .append(String.join(", ", plan.getMentionedIngredients())).append('\n');
         }
         if (plan.getPreferenceTags() != null && !plan.getPreferenceTags().isEmpty()) {
