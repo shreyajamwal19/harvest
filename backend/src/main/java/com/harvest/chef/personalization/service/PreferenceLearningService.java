@@ -157,18 +157,39 @@ public class PreferenceLearningService {
     }
 
     /** Persists everything {@link #detect} found for this message, via UserProfileService. */
+    /**
+     * Each write is best-effort and isolated per learned preference: a DB hiccup (including a
+     * benign unique-constraint race between two near-simultaneous turns for the same user -
+     * user_preferences has a (user_id, category, value) unique constraint, so a losing
+     * concurrent insert throws) must never fail the whole chat turn. Previously any exception
+     * here propagated straight up through CompositionService into a 500, discarding an
+     * otherwise fully-composed recipe/technique answer over what should be a silently-recoverable
+     * personalization write.
+     */
     public List<LearnedPreference> learnFromMessage(UserProfileService profileService, Long userId, String message) {
         List<LearnedPreference> learned = detect(message);
+        List<LearnedPreference> persisted = new ArrayList<>();
         for (LearnedPreference lp : learned) {
-            if (lp.positive()) {
-                profileService.reinforce(userId, lp.category(), lp.value(), PreferenceSource.EXPLICIT);
-            } else if (lp.contradictsOpposite()) {
-                profileService.weakenAsContradiction(userId, lp.category(), lp.value(), PreferenceSource.EXPLICIT);
-            } else {
-                profileService.weaken(userId, lp.category(), lp.value(), PreferenceSource.EXPLICIT);
+            try {
+                if (lp.positive()) {
+                    profileService.reinforce(userId, lp.category(), lp.value(), PreferenceSource.EXPLICIT);
+                } else if (lp.contradictsOpposite()) {
+                    profileService.weakenAsContradiction(userId, lp.category(), lp.value(), PreferenceSource.EXPLICIT);
+                } else {
+                    profileService.weaken(userId, lp.category(), lp.value(), PreferenceSource.EXPLICIT);
+                }
+                // Only the successfully-persisted subset is returned: CompositionService uses
+                // this list both to decide whether to reload the profile snapshot AND to tell
+                // the user "Noted that you like X" - acknowledging something that failed to
+                // save would be an honesty violation (never claim memory was saved when it
+                // wasn't), so a failed write here must not appear as learned to the caller.
+                persisted.add(lp);
+            } catch (Exception e) {
+                log.warn("Failed to persist learned preference userId={} category={} value='{}': {}",
+                        userId, lp.category(), lp.value(), e.getMessage());
             }
         }
-        return learned;
+        return persisted;
     }
 
     private String normalize(String raw) {
