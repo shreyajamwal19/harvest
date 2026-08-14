@@ -129,14 +129,38 @@ public class LocalRecipeProvider implements RecipeKnowledgeProvider {
         return 0.95;
     }
 
+    // Food.com submitter descriptions are often long personal narratives ("this recipe was
+    // given to me by...") rather than anything describing the dish - unbounded, that reads as
+    // unprofessional clutter in a product UI. Capped to a short, clean preview at the source
+    // so every downstream consumer (Chef card, LLM prompts) gets something reasonable without
+    // needing to duplicate this trimming logic itself.
+    private static final int MAX_DESCRIPTION_LENGTH = 220;
+
     private RecipeCandidate toCandidate(Recipe recipe) {
         return RecipeCandidate.builder()
                 .title(recipe.getTitle())
-                .description(recipe.getDescription())
+                .description(trimDescription(recipe.getDescription()))
                 .servings(recipe.getServings())
                 .ingredients(recipe.getIngredients())
                 .steps(recipe.getSteps())
                 .source(getName())
                 .build();
+    }
+
+    private String trimDescription(String description) {
+        if (description == null) {
+            return null;
+        }
+        String trimmed = description.trim();
+        if (trimmed.length() <= MAX_DESCRIPTION_LENGTH) {
+            return trimmed;
+        }
+        // Cut at the last word boundary within the limit rather than mid-word, then add an
+        // ellipsis - never invents or paraphrases content, just shortens where it already ends.
+        int cut = trimmed.lastIndexOf(' ', MAX_DESCRIPTION_LENGTH);
+        if (cut <= 0) {
+            cut = MAX_DESCRIPTION_LENGTH;
+        }
+        return trimmed.substring(0, cut).trim() + "...";
     }
 }
