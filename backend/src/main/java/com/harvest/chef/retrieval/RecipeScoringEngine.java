@@ -1019,7 +1019,7 @@ public class RecipeScoringEngine {
 
         if (!mentioned.isEmpty()) {
             if (matchedCount == mentioned.size() && mentioned.size() > 1) {
-                explanations.add("Uses all " + mentioned.size() + " ingredients you mentioned.");
+                explanations.add("Uses all " + mentioned.size() + " ingredients/terms from your request.");
             } else if (matchedCount == mentioned.size() && mentioned.size() == 1) {
                 // Previously claimed "primary ingredient" for ANY single-ingredient match,
                 // including one buried deep in a 12-item ingredient list where it's barely
@@ -1035,7 +1035,7 @@ public class RecipeScoringEngine {
             } else if (mentioned.size() > 1 && matchedCount / (double) mentioned.size() >= 0.6) {
                 explanations.add("High ingredient match.");
             } else if (matchedCount > 0) {
-                explanations.add("Uses " + matchedCount + " of the " + mentioned.size() + " ingredient(s) you mentioned.");
+                explanations.add("Uses " + matchedCount + " of the " + mentioned.size() + " ingredient(s)/term(s) from your request.");
             }
             if (matchedCount > 0 && missingCount <= 2) {
                 explanations.add(missingCount == 0 ? "Nothing else to buy." : "Only " + missingCount + " ingredient(s) missing.");
