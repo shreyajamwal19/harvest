@@ -85,7 +85,14 @@ public class RecipeScoringEngine {
     // the preference's own confidence so a low-confidence/inferred restriction still applies but
     // less forcefully than a confidently-known, EXPLICIT one - see personalizationScore's
     // header comment for why this lives outside the blended [-1,1] average.
-    private static final double WEIGHT_DIETARY_RESTRICTION = 1.2;
+    // Set equal to WEIGHT_EXCLUSION (both apply at confidence-scaled scale, 0-1): a dietary
+    // restriction is exactly as serious as an explicit "no X" exclusion and must be exactly as
+    // dominant. Previously 1.2, which is LESS than the sum of every other positive weight
+    // (~1.33) - meaning a sufficiently strong match on ordinary relevance/personalization could
+    // in principle outscore an explicit "I'm vegetarian" restriction and let a conflicting
+    // recipe win. Raised to close that gap and guarantee restrictions dominate, matching how
+    // exclusions already behave.
+    private static final double WEIGHT_DIETARY_RESTRICTION = 1.5;
 
     // Phase 7 - explicitly negated ingredients from the CURRENT message ("no mushrooms").
     // Deliberately the largest single weight in the engine: this is the user's own explicit
