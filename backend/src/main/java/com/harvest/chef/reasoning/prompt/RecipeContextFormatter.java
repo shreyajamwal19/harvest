@@ -49,6 +49,9 @@ public final class RecipeContextFormatter {
     }
 
     public static void appendRecipeBlocks(StringBuilder prompt, List<RecipeResponse> recipes) {
+        if (recipes == null || recipes.isEmpty()) {
+            return;
+        }
         int index = 1;
         for (RecipeResponse recipe : recipes) {
             prompt.append(index++).append(") ").append(recipe.getTitle())
@@ -69,7 +72,7 @@ public final class RecipeContextFormatter {
                 prompt.append("   Steps: ").append(String.join(" | ", recipe.getSteps())).append('\n');
             }
         }
-        if (recipes != null && recipes.size() > 1) {
+        if (recipes.size() > 1) {
             // If the user refers to one positionally ("the second one", "recipe 2", "the last
             // one") rather than by name, resolve it against the numbering above - don't ask
             // them to repeat which recipe they mean when the numbering already answers it.
