@@ -1021,7 +1021,17 @@ public class RecipeScoringEngine {
             if (matchedCount == mentioned.size() && mentioned.size() > 1) {
                 explanations.add("Uses all " + mentioned.size() + " ingredients you mentioned.");
             } else if (matchedCount == mentioned.size() && mentioned.size() == 1) {
-                explanations.add(capitalize(mentioned.get(0)) + " is the primary ingredient.");
+                // Previously claimed "primary ingredient" for ANY single-ingredient match,
+                // including one buried deep in a 12-item ingredient list where it's barely
+                // relevant (e.g. an egg used only to seal an egg roll wrapper). The
+                // ingredientImportanceScore computed above already distinguishes this (PRIMARY
+                // = 1.0 means the ingredient appears in the title or tops the ingredient list) -
+                // reuse that instead of an ungrounded blanket claim.
+                if (importance >= 0.95) {
+                    explanations.add(capitalize(mentioned.get(0)) + " is the primary ingredient.");
+                } else {
+                    explanations.add(capitalize(mentioned.get(0)) + " appears in this recipe.");
+                }
             } else if (mentioned.size() > 1 && matchedCount / (double) mentioned.size() >= 0.6) {
                 explanations.add("High ingredient match.");
             } else if (matchedCount > 0) {
