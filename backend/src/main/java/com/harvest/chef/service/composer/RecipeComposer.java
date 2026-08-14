@@ -81,7 +81,14 @@ public class RecipeComposer implements ResponseComposer {
         ChefResponseType responseType = reasoning.map(ChefReasoningResult::getType)
                 .orElse(ChefResponseType.RECIPE);
 
-        sessionStateService.updateAfterRecipeTurn(context.getSessionId(), plan, recipes);
+        // Only persist "what was actually shown" when the response genuinely IS a recipe list -
+        // if the AI Chef Reasoning Layer downgraded this to CLARIFYING_QUESTION, the user never
+        // actually saw these recipes (ChefResponse.recipes is null below in that case too), so
+        // recording them as shown would let a later "the second one" wrongly resolve against
+        // recipes that were never displayed - a real conversational-integrity bug, not just a
+        // cosmetic one.
+        List<RecipeResponse> shownToUser = responseType == ChefResponseType.RECIPE ? recipes : List.of();
+        sessionStateService.updateAfterRecipeTurn(context.getSessionId(), plan, shownToUser);
 
         if (responseType == ChefResponseType.RECIPE) {
             // Phase 6A - feeds Smart Variety on future turns. Never blocks or fails this
