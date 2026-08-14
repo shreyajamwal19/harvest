@@ -7,42 +7,67 @@ export default {
   theme: {
     extend: {
       colors: {
-        cream: {
-          50: '#FDFCF8',
-          100: '#FAF7F0',
-          200: '#F5F0E6',
-          300: '#EDE5D5',
-          400: '#E0D4BC',
-          500: '#D1C2A3',
+        // Warm paper surfaces — the app's "table linen"
+        paper: {
+          50: '#FEFDFB',
+          100: '#F8F4EC',
+          200: '#F1EADB',
+          300: '#E6DAC2',
+          400: '#D6C4A3',
+          500: '#C2AC84',
         },
-        sage: {
-          50: '#F4F7F4',
-          100: '#E3EBE3',
-          200: '#C5D6C5',
-          300: '#9EBA9E',
-          400: '#7A9E7A',
-          500: '#5C825C',
-          600: '#486848',
-          700: '#3A523A',
-          800: '#2E422E',
-          900: '#263626',
+        // Warm near-black ink for text — never pure black
+        ink: {
+          400: '#8A7F73',
+          500: '#5B5147',
+          600: '#463D34',
+          700: '#332B24',
+          800: '#241F1A',
+          900: '#181410',
         },
-        terracotta: {
-          50: '#FDF5F3',
-          100: '#FAE8E3',
-          200: '#F5D0C6',
-          300: '#EDB0A0',
-          400: '#E08A72',
-          500: '#D46B4E',
-          600: '#C2553A',
-          700: '#A24430',
-          800: '#863A2C',
-          900: '#703428',
+        // Roasted brick — primary accent (deliberately not Claude-terracotta orange)
+        brick: {
+          50: '#FBF1EC',
+          100: '#F1D9CD',
+          200: '#DFB09A',
+          300: '#C7815F',
+          400: '#A85940',
+          500: '#8C3F2D',
+          600: '#733225',
+          700: '#5B271D',
+        },
+        // Deep moss — secondary accent
+        moss: {
+          50: '#EEF2ED',
+          100: '#D3DED2',
+          200: '#A6BDA3',
+          300: '#799C74',
+          400: '#587B54',
+          500: '#3E5641',
+          600: '#324536',
+          700: '#26342A',
+        },
+        // Toasted gold — sparing highlight accent
+        gold: {
+          100: '#F6E8C8',
+          300: '#E0BB6B',
+          500: '#B98A2E',
+          700: '#8C6A20',
         },
       },
       fontFamily: {
-        display: ['Playfair Display', 'Georgia', 'serif'],
+        display: ['Fraunces', 'Georgia', 'serif'],
         body: ['Inter', 'system-ui', 'sans-serif'],
+      },
+      boxShadow: {
+        soft: '0 1px 2px rgba(36, 31, 26, 0.04), 0 8px 24px -12px rgba(36, 31, 26, 0.12)',
+        lift: '0 4px 8px rgba(36, 31, 26, 0.06), 0 16px 32px -16px rgba(36, 31, 26, 0.18)',
+      },
+      borderRadius: {
+        sheet: '0.375rem',
+      },
+      transitionTimingFunction: {
+        quiet: 'cubic-bezier(0.22, 1, 0.36, 1)',
       },
     },
   },

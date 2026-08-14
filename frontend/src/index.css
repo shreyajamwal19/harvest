@@ -8,27 +8,59 @@
   }
   body {
     font-family: 'Inter', system-ui, sans-serif;
-    background-color: #FAF7F0;
-    color: #2E422E;
+    background-color: #F8F4EC;
+    color: #241F1A;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Playfair Display', Georgia, serif;
+    font-family: 'Fraunces', Georgia, serif;
+    letter-spacing: -0.01em;
+  }
+  ::selection {
+    background-color: #F1D9CD;
+    color: #241F1A;
+  }
+  /* Visible, intentional focus ring everywhere — never suppressed */
+  :focus-visible {
+    outline: 2px solid #8C3F2D;
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
 
 @layer components {
   .btn-primary {
-    @apply inline-flex items-center justify-center px-6 py-3 bg-sage-600 text-white font-medium rounded-xl transition-all duration-200 hover:bg-sage-700 focus:outline-none focus:ring-2 focus:ring-sage-400 focus:ring-offset-2 active:scale-[0.98];
+    @apply inline-flex items-center justify-center px-6 py-3 bg-brick-500 text-paper-50 font-medium rounded-sheet transition-all duration-200 ease-quiet hover:bg-brick-600 focus-visible:outline-2 focus-visible:outline-brick-500 active:scale-[0.98];
   }
   .btn-secondary {
-    @apply inline-flex items-center justify-center px-6 py-3 bg-transparent border-2 border-sage-600 text-sage-700 font-medium rounded-xl transition-all duration-200 hover:bg-sage-50 focus:outline-none focus:ring-2 focus:ring-sage-400 focus:ring-offset-2 active:scale-[0.98];
+    @apply inline-flex items-center justify-center px-6 py-3 bg-transparent border border-ink-700/20 text-ink-700 font-medium rounded-sheet transition-all duration-200 ease-quiet hover:border-ink-700/40 hover:bg-paper-200/60 active:scale-[0.98];
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-ink-600 rounded-sheet transition-colors duration-150 hover:text-ink-800 hover:bg-paper-200/70;
   }
   .input-field {
-    @apply w-full px-4 py-3 bg-cream-50 border border-cream-400 rounded-xl text-sage-900 placeholder-cream-500 focus:outline-none focus:ring-2 focus:ring-sage-400 focus:border-transparent transition-all duration-200;
+    @apply w-full px-4 py-3 bg-paper-50 border border-ink-700/15 rounded-sheet text-ink-800 placeholder-ink-400 focus:outline-none focus-visible:outline-2 focus-visible:outline-brick-500 focus:border-transparent transition-all duration-150;
   }
   .card {
-    @apply bg-white rounded-2xl shadow-sm border border-cream-200 p-6;
+    @apply bg-paper-50 rounded-sheet border border-ink-700/10 shadow-soft p-6;
+  }
+  .card-flat {
+    @apply bg-transparent border-t border-ink-700/10 pt-6;
+  }
+  .eyebrow {
+    @apply text-xs font-semibold uppercase tracking-[0.14em] text-brick-500;
+  }
+  .divider-gold {
+    @apply h-px w-10 bg-gold-500;
   }
 }
