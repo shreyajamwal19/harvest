@@ -59,7 +59,12 @@ public final class TypoCorrectionUtil {
             // edit-distance guessing (which "chkn" is too short and vowel-less for anyway).
             Map.entry("chkn", "chicken"),
             Map.entry("veggies", "vegetables"),
-            Map.entry("veggie", "vegetable")
+            Map.entry("veggie", "vegetable"),
+            // Short (<5-char) dish-shape typos: the edit-distance fallback below deliberately
+            // never fires on words this short (too unreliable at that length - see `correct`),
+            // so these need an explicit entry the same way "chkn" does, or they're never
+            // corrected at all and searched as a literal nonsense token instead.
+            Map.entry("boal", "bowl")
     );
 
     /**
@@ -78,7 +83,18 @@ public final class TypoCorrectionUtil {
             "chocolate", "vanilla", "cinnamon", "basil", "oregano", "thyme", "ginger",
             "honey", "yogurt", "oil", "salt", "vinegar", "recipe", "recipes",
             "ingredient", "ingredients", "breakfast", "lunch", "dinner", "dessert",
-            "healthy", "quick", "easy", "spicy", "zucchini", "cauliflower"
+            "healthy", "quick", "easy", "spicy", "zucchini", "cauliflower",
+            // Dish-shape/format words. Missing these meant a typo in the dish word itself
+            // (not an ingredient) never got corrected, e.g. "burrito boal" was searched
+            // literally as the token "boal" - which matches nothing - so the candidate pool
+            // was effectively driven by "burrito" alone and surfaced an unrelated burrito
+            // recipe instead of anything resembling a bowl.
+            "bowl", "cake", "salad", "soup", "stew", "chili", "casserole", "curry",
+            "pizza", "burrito", "taco", "tacos", "burger", "sandwich", "wrap", "skillet",
+            "muffin", "muffins", "pancake", "pancakes", "waffle", "waffles", "cookie",
+            "cookies", "pie", "bar", "bars", "roll", "rolls", "noodles", "noodle",
+            "sauce", "gravy", "dressing", "smoothie", "toast", "omelette", "omelet",
+            "quiche", "risotto", "lasagna", "meatballs", "meatloaf", "truffle", "alfredo"
     );
 
     private TypoCorrectionUtil() {
