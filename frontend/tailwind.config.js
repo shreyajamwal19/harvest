@@ -27,14 +27,14 @@ export default {
         },
         // Roasted brick — primary accent (deliberately not Claude-terracotta orange)
         brick: {
-          50: '#FBF1EC',
-          100: '#F1D9CD',
-          200: '#DFB09A',
-          300: '#C7815F',
-          400: '#A85940',
-          500: '#8C3F2D',
-          600: '#733225',
-          700: '#5B271D',
+          50: '#F7EBEA',
+          100: '#E6C7C4',
+          200: '#B97A78',
+          300: '#8C3436',
+          400: '#6B2226',
+          500: '#4A1518',
+          600: '#3A1013',
+          700: '#2A0B0D',
         },
         // Deep moss — secondary accent
         moss: {
