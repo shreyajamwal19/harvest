@@ -1,15 +1,7 @@
 /* eslint-disable react/prop-types -- this project doesn't use PropTypes, see AuthContext.jsx */
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import {
-  ChefHat,
-  Send,
-  AlertCircle,
-  HelpCircle,
-  MessageCircleQuestion,
-  Sparkles,
-  ShoppingBasket,
-} from 'lucide-react'
+import { Send, ArrowUp } from 'lucide-react'
 import { chefChat, getErrorMessage } from '../services/api'
 
 const SOURCE_LABELS = {
@@ -18,123 +10,106 @@ const SOURCE_LABELS = {
   generated: 'Chef-generated',
 }
 
-/** Renders a single recipe response as a structured card, including why it was chosen. */
+/** Renders a single recipe response as an editorial recipe card, including why it was chosen. */
 function RecipeCard({ recipe }) {
   if (!recipe) return null
   const sourceLabel = SOURCE_LABELS[recipe.source] || recipe.source
 
   return (
-    <div className="card mt-2">
-      <div className="flex items-start justify-between gap-2 mb-1">
-        <h3 className="font-display text-lg font-semibold text-sage-900">{recipe.title}</h3>
-        {sourceLabel && (
-          <span className="flex-shrink-0 text-[10px] uppercase tracking-wide font-semibold text-sage-500 bg-cream-100 border border-cream-200 rounded-full px-2 py-1">
-            {sourceLabel}
-          </span>
+    <div className="mt-3 bg-paper-50 border border-ink-700/10 rounded-sheet overflow-hidden">
+      <div className="px-5 pt-5 pb-4 border-b border-ink-700/10">
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="font-display text-xl font-semibold text-ink-800 leading-snug">
+            {recipe.title}
+          </h3>
+          {sourceLabel && (
+            <span className="flex-shrink-0 mt-1 eyebrow text-[10px]">{sourceLabel}</span>
+          )}
+        </div>
+        {recipe.description && (
+          <p className="text-sm text-ink-500 mt-2 leading-relaxed">{recipe.description}</p>
+        )}
+        {recipe.servings && (
+          <p className="text-xs text-ink-400 mt-3">Serves {recipe.servings}</p>
         )}
       </div>
 
-      {recipe.description && (
-        <p className="text-sm text-sage-600 mb-3">{recipe.description}</p>
-      )}
-
       {recipe.rationale && (
-        <div className="flex items-start gap-2 text-sm text-sage-700 bg-sage-50 border border-sage-100 rounded-lg px-3 py-2 mb-3">
-          <Sparkles className="w-4 h-4 mt-0.5 flex-shrink-0 text-sage-500" />
-          <span>{recipe.rationale}</span>
+        <div className="px-5 py-3 bg-paper-200/50 border-b border-ink-700/10">
+          <p className="text-sm text-ink-600 italic">{recipe.rationale}</p>
         </div>
       )}
 
       {recipe.missingIngredients?.length > 0 && (
-        <div className="flex items-start gap-2 text-sm text-terracotta-700 bg-terracotta-50 border border-terracotta-100 rounded-lg px-3 py-2 mb-3">
-          <ShoppingBasket className="w-4 h-4 mt-0.5 flex-shrink-0" />
-          <span>You&apos;ll need to pick up: {recipe.missingIngredients.join(', ')}</span>
+        <div className="px-5 py-3 bg-brick-50 border-b border-brick-100 text-sm text-brick-600">
+          Pick up: {recipe.missingIngredients.join(', ')}
         </div>
       )}
 
-      {recipe.servings && (
-        <p className="text-xs font-medium text-sage-500 mb-4">Serves {recipe.servings}</p>
-      )}
+      <div className="px-5 py-5 grid grid-cols-1 sm:grid-cols-[1fr_1.4fr] gap-6">
+        {recipe.ingredients?.length > 0 && (
+          <div>
+            <h4 className="eyebrow mb-3">Ingredients</h4>
+            <ul className="space-y-1.5">
+              {recipe.ingredients.map((ingredient, index) => (
+                <li key={index} className="text-sm text-ink-700 flex gap-2.5">
+                  <span className="text-gold-500 mt-1.5 block w-1 h-1 rounded-full flex-shrink-0" />
+                  {ingredient}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
-      {recipe.ingredients?.length > 0 && (
-        <div className="mb-4">
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-sage-500 mb-2">
-            Ingredients
-          </h4>
-          <ul className="space-y-1">
-            {recipe.ingredients.map((ingredient, index) => (
-              <li key={index} className="text-sm text-sage-800 flex gap-2">
-                <span className="text-sage-400">&bull;</span>
-                {ingredient}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {recipe.steps?.length > 0 && (
-        <div className="mb-2">
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-sage-500 mb-2">
-            Steps
-          </h4>
-          <ol className="space-y-2">
-            {recipe.steps.map((step, index) => (
-              <li key={index} className="text-sm text-sage-800 flex gap-3">
-                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-sage-100 text-sage-700 text-xs font-semibold flex items-center justify-center">
-                  {index + 1}
-                </span>
-                <span>{step}</span>
-              </li>
-            ))}
-          </ol>
-        </div>
-      )}
+        {recipe.steps?.length > 0 && (
+          <div>
+            <h4 className="eyebrow mb-3">Method</h4>
+            <ol className="space-y-3">
+              {recipe.steps.map((step, index) => (
+                <li key={index} className="text-sm text-ink-700 flex gap-3">
+                  <span className="flex-shrink-0 font-display text-sm text-brick-400">
+                    {String(index + 1).padStart(2, '0')}
+                  </span>
+                  <span className="leading-relaxed">{step}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+      </div>
 
       {recipe.notes && (
-        <p className="text-xs text-sage-500 italic mt-3 pt-3 border-t border-cream-200">
-          {recipe.notes}
-        </p>
+        <p className="px-5 pb-5 text-xs text-ink-500 italic">{recipe.notes}</p>
       )}
     </div>
   )
 }
 
-/** One message bubble, styled by role and (for the assistant) response type. */
+/** One message turn, styled by role and (for the assistant) response type. */
 function MessageBubble({ turn }) {
   const isUser = turn.role === 'user'
 
   if (isUser) {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[80%] bg-sage-600 text-white rounded-2xl rounded-br-sm px-4 py-2.5 text-sm">
+        <div className="max-w-[80%] bg-brick-500 text-paper-50 rounded-sheet rounded-br-sm px-4 py-2.5 text-sm leading-relaxed">
           {turn.content}
         </div>
       </div>
     )
   }
 
-  const isClarifying = turn.responseType === 'CLARIFYING_QUESTION'
-  const isNonAnswer = turn.responseType === 'HONEST_NON_ANSWER'
-  const isTechnique = turn.responseType === 'TECHNIQUE_ANSWER'
+  const accent =
+    turn.responseType === 'CLARIFYING_QUESTION' ? 'border-gold-500'
+    : turn.responseType === 'HONEST_NON_ANSWER' ? 'border-ink-700/20'
+    : turn.responseType === 'TECHNIQUE_ANSWER' ? 'border-moss-400'
+    : 'border-brick-400'
 
   return (
     <div className="flex justify-start">
       <div className="max-w-[85%] w-full">
-        <div
-          className={`rounded-2xl rounded-bl-sm px-4 py-2.5 text-sm flex items-start gap-2 ${
-            isClarifying
-              ? 'bg-terracotta-50 text-terracotta-800 border border-terracotta-200'
-              : isNonAnswer
-                ? 'bg-cream-200 text-sage-700 border border-cream-300'
-                : isTechnique
-                  ? 'bg-sage-50 text-sage-800 border border-sage-200'
-                  : 'bg-white text-sage-800 border border-cream-200'
-          }`}
-        >
-          {isClarifying && <MessageCircleQuestion className="w-4 h-4 mt-0.5 flex-shrink-0" />}
-          {isNonAnswer && <HelpCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />}
-          {isTechnique && <Sparkles className="w-4 h-4 mt-0.5 flex-shrink-0" />}
-          <span>{turn.content}</span>
+        <div className={`border-l-2 ${accent} pl-4 py-0.5 text-sm text-ink-700 leading-relaxed`}>
+          {turn.content}
         </div>
         {turn.recipes?.map((recipe, index) => (
           <RecipeCard key={index} recipe={recipe} />
@@ -147,13 +122,13 @@ function MessageBubble({ turn }) {
 function TypingIndicator() {
   return (
     <div className="flex justify-start">
-      <div className="bg-white border border-cream-200 rounded-2xl rounded-bl-sm px-4 py-3 flex gap-1">
+      <div className="border-l-2 border-ink-700/15 pl-4 py-1 flex gap-1.5">
         {[0, 1, 2].map((i) => (
           <motion.span
             key={i}
-            className="w-1.5 h-1.5 bg-sage-400 rounded-full"
-            animate={{ opacity: [0.3, 1, 0.3] }}
-            transition={{ duration: 1, repeat: Infinity, delay: i * 0.15 }}
+            className="w-1.5 h-1.5 bg-ink-400 rounded-full"
+            animate={{ opacity: [0.25, 0.9, 0.25] }}
+            transition={{ duration: 1.1, repeat: Infinity, delay: i * 0.15 }}
           />
         ))}
       </div>
@@ -207,23 +182,20 @@ function Chef() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex flex-col max-w-3xl mx-auto px-4 sm:px-6 py-8">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="w-10 h-10 bg-sage-600 rounded-xl flex items-center justify-center">
-          <ChefHat className="w-5 h-5 text-white" />
-        </div>
-        <div>
-          <h1 className="font-display text-xl font-bold text-sage-900">Chef Brain</h1>
-          <p className="text-xs text-sage-500">Tell me what you have, or what you&apos;re trying to do.</p>
-        </div>
+    <div className="min-h-[calc(100vh-4rem)] flex flex-col max-w-3xl mx-auto px-4 sm:px-6 py-10">
+      <div className="mb-8 pb-6 border-b border-ink-700/10">
+        <span className="eyebrow">Chef Brain</span>
+        <h1 className="font-display text-2xl font-semibold text-ink-800 mt-1.5">
+          What's in your kitchen today?
+        </h1>
       </div>
 
-      <div className="flex-1 flex flex-col gap-3 mb-4 min-h-[300px]">
+      <div className="flex-1 flex flex-col gap-4 mb-6 min-h-[280px]">
         {turns.length === 0 && (
-          <div className="flex-1 flex items-center justify-center text-center px-8">
-            <p className="text-sage-400 text-sm">
-              Try something like &ldquo;I have eggs, spinach and rice&rdquo;, &ldquo;I want
-              authentic ramen&rdquo;, or &ldquo;my sauce split&rdquo;.
+          <div className="flex-1 flex items-center justify-center text-center px-6">
+            <p className="text-ink-400 text-sm max-w-sm leading-relaxed">
+              Try &ldquo;I have eggs, spinach and rice&rdquo;, &ldquo;I want authentic
+              ramen&rdquo;, or &ldquo;my sauce split.&rdquo;
             </p>
           </div>
         )}
@@ -232,9 +204,9 @@ function Chef() {
           {turns.map((turn, index) => (
             <motion.div
               key={index}
-              initial={{ opacity: 0, y: 10 }}
+              initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.25 }}
+              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
             >
               <MessageBubble turn={turn} />
             </motion.div>
@@ -246,13 +218,12 @@ function Chef() {
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 text-sm text-terracotta-700 bg-terracotta-50 border border-terracotta-200 rounded-xl px-4 py-2.5 mb-3">
-          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+        <div className="text-sm text-brick-600 bg-brick-50 border border-brick-200 rounded-sheet px-4 py-2.5 mb-3">
           {error}
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="flex items-end gap-2">
+      <form onSubmit={handleSubmit} className="flex items-end gap-2 sticky bottom-4">
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -262,18 +233,18 @@ function Chef() {
               handleSubmit(e)
             }
           }}
-          placeholder="What's in your kitchen today?"
+          placeholder="Tell Chef Brain what you have..."
           rows={1}
-          className="input-field resize-none flex-1"
+          className="input-field resize-none flex-1 shadow-lift"
           disabled={isSending}
         />
         <button
           type="submit"
-          className="btn-primary px-4 py-3"
+          className="btn-primary px-4 py-3 shadow-lift"
           disabled={isSending || !input.trim()}
           aria-label="Send message"
         >
-          <Send className="w-4 h-4" />
+          {isSending ? <ArrowUp className="w-4 h-4 animate-pulse" strokeWidth={1.75} /> : <Send className="w-4 h-4" strokeWidth={1.75} />}
         </button>
       </form>
     </div>
