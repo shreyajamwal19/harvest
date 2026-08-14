@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Menu, X, Leaf, LogOut, User } from 'lucide-react'
+import { Menu, X, LogOut } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 function Navbar() {
@@ -23,67 +23,59 @@ function Navbar() {
   ]
 
   return (
-    <nav className="sticky top-0 z-50 bg-cream-100/80 backdrop-blur-md border-b border-cream-200">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <nav className="sticky top-0 z-50 bg-paper-100/90 backdrop-blur-sm border-b border-ink-700/10">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          {/* Logo */}
-          <Link to="/" className="flex items-center gap-2 group">
-            <div className="w-9 h-9 bg-sage-600 rounded-xl flex items-center justify-center group-hover:bg-sage-700 transition-colors">
-              <Leaf className="w-5 h-5 text-white" />
-            </div>
-            <span className="font-display text-xl font-semibold text-sage-800 tracking-tight">
+          {/* Wordmark */}
+          <Link to="/" className="group flex items-baseline gap-0.5">
+            <span className="font-display text-2xl font-semibold text-ink-800 tracking-tight">
               Harvest
             </span>
+            <span className="block h-[2px] w-2 bg-brick-500 translate-y-[-4px] transition-all duration-300 ease-quiet group-hover:w-4" />
           </Link>
 
           {/* Desktop Nav */}
-          <div className="hidden md:flex items-center gap-1">
+          <div className="hidden md:flex items-center gap-8">
             {navLinks.map((link) => (
               <Link
                 key={link.path}
                 to={link.path}
-                className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                className={`relative py-2 text-sm font-medium transition-colors duration-150 ${
                   isActive(link.path)
-                    ? 'text-sage-800 bg-sage-100'
-                    : 'text-sage-600 hover:text-sage-800 hover:bg-cream-200'
+                    ? 'text-ink-800'
+                    : 'text-ink-500 hover:text-ink-800'
                 }`}
               >
                 {link.label}
+                {isActive(link.path) && (
+                  <motion.span
+                    layoutId="nav-underline"
+                    className="absolute left-0 right-0 -bottom-0.5 h-[2px] bg-brick-500"
+                    transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+                  />
+                )}
               </Link>
             ))}
           </div>
 
           {/* Desktop Auth */}
-          <div className="hidden md:flex items-center gap-3">
+          <div className="hidden md:flex items-center gap-2">
             {isAuthenticated ? (
-              <div className="flex items-center gap-3">
-                <Link
-                  to="/profile"
-                  className="flex items-center gap-2 px-3 py-1.5 bg-cream-200 rounded-xl hover:bg-cream-300 transition-colors"
-                >
-                  <User className="w-4 h-4 text-sage-600" />
-                  <span className="text-sm font-medium text-sage-700">{user?.name}</span>
+              <div className="flex items-center gap-1">
+                <Link to="/profile" className="btn-ghost">
+                  {user?.name}
                 </Link>
-                <button
-                  onClick={handleLogout}
-                  className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-terracotta-600 hover:text-terracotta-700 hover:bg-terracotta-50 rounded-xl transition-all"
-                >
-                  <LogOut className="w-4 h-4" />
+                <button onClick={handleLogout} className="btn-ghost flex items-center gap-1.5">
+                  <LogOut className="w-3.5 h-3.5" strokeWidth={1.75} />
                   Log out
                 </button>
               </div>
             ) : (
               <>
-                <Link
-                  to="/login"
-                  className="px-4 py-2 text-sm font-medium text-sage-700 hover:text-sage-900 hover:bg-cream-200 rounded-xl transition-all"
-                >
+                <Link to="/login" className="btn-ghost">
                   Log in
                 </Link>
-                <Link
-                  to="/signup"
-                  className="btn-primary text-sm py-2"
-                >
+                <Link to="/signup" className="btn-primary text-sm py-2 px-5">
                   Get started
                 </Link>
               </>
@@ -93,9 +85,11 @@ function Navbar() {
           {/* Mobile Menu Button */}
           <button
             onClick={() => setIsOpen(!isOpen)}
-            className="md:hidden p-2 rounded-xl text-sage-600 hover:bg-cream-200 transition-colors"
+            aria-label={isOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={isOpen}
+            className="md:hidden p-2 -mr-2 rounded-sheet text-ink-600 hover:bg-paper-200 transition-colors"
           >
-            {isOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            {isOpen ? <X className="w-6 h-6" strokeWidth={1.75} /> : <Menu className="w-6 h-6" strokeWidth={1.75} />}
           </button>
         </div>
       </div>
@@ -107,7 +101,8 @@ function Navbar() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className="md:hidden bg-cream-100 border-b border-cream-200 overflow-hidden"
+            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            className="md:hidden bg-paper-100 border-b border-ink-700/10 overflow-hidden"
           >
             <div className="px-4 py-3 space-y-1">
               {navLinks.map((link) => (
@@ -115,47 +110,44 @@ function Navbar() {
                   key={link.path}
                   to={link.path}
                   onClick={() => setIsOpen(false)}
-                  className={`block px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                    isActive(link.path)
-                      ? 'text-sage-800 bg-sage-100'
-                      : 'text-sage-600 hover:text-sage-800 hover:bg-cream-200'
+                  className={`block px-2 py-3 text-base font-medium border-b border-ink-700/5 ${
+                    isActive(link.path) ? 'text-ink-800' : 'text-ink-500'
                   }`}
                 >
                   {link.label}
                 </Link>
               ))}
-              <div className="pt-3 border-t border-cream-200 mt-3">
+              <div className="pt-3">
                 {isAuthenticated ? (
                   <>
                     <Link
                       to="/profile"
                       onClick={() => setIsOpen(false)}
-                      className="flex items-center gap-2 px-4 py-2 mb-2 rounded-xl hover:bg-cream-200 transition-colors"
+                      className="block px-2 py-2.5 text-sm font-medium text-ink-700"
                     >
-                      <User className="w-4 h-4 text-sage-600" />
-                      <span className="text-sm font-medium text-sage-700">{user?.name}</span>
+                      {user?.name}
                     </Link>
                     <button
                       onClick={() => { handleLogout(); setIsOpen(false); }}
-                      className="flex items-center gap-2 w-full px-4 py-2.5 text-sm font-medium text-terracotta-600 hover:bg-terracotta-50 rounded-xl transition-all"
+                      className="flex items-center gap-2 w-full px-2 py-2.5 text-sm font-medium text-brick-500"
                     >
-                      <LogOut className="w-4 h-4" />
+                      <LogOut className="w-4 h-4" strokeWidth={1.75} />
                       Log out
                     </button>
                   </>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="flex flex-col gap-2 px-2">
                     <Link
                       to="/login"
                       onClick={() => setIsOpen(false)}
-                      className="block px-4 py-2.5 text-sm font-medium text-sage-700 hover:bg-cream-200 rounded-xl transition-all"
+                      className="py-2 text-sm font-medium text-ink-700"
                     >
                       Log in
                     </Link>
                     <Link
                       to="/signup"
                       onClick={() => setIsOpen(false)}
-                      className="block btn-primary text-sm text-center"
+                      className="btn-primary text-sm text-center"
                     >
                       Get started
                     </Link>
