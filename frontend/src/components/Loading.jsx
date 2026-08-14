@@ -1,23 +1,20 @@
-import { motion } from 'framer-motion'
-import { Leaf } from 'lucide-react'
-
 function Loading() {
   return (
-    <div className="flex flex-col items-center justify-center min-h-[300px] gap-4">
-      <motion.div
-        animate={{ rotate: 360 }}
-        transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
-        className="w-12 h-12 bg-sage-100 rounded-xl flex items-center justify-center"
-      >
-        <Leaf className="w-6 h-6 text-sage-600" />
-      </motion.div>
-      <motion.p
-        animate={{ opacity: [0.5, 1, 0.5] }}
-        transition={{ duration: 1.5, repeat: Infinity }}
-        className="text-sm text-sage-500 font-medium"
-      >
-        Loading...
-      </motion.p>
+    <div
+      className="flex flex-col items-center justify-center min-h-[300px] gap-4"
+      role="status"
+      aria-label="Loading"
+    >
+      <div className="flex gap-1.5">
+        {[0, 1, 2].map((i) => (
+          <span
+            key={i}
+            className="w-1.5 h-1.5 rounded-full bg-brick-400 animate-pulse"
+            style={{ animationDelay: `${i * 150}ms`, animationDuration: '1.1s' }}
+          />
+        ))}
+      </div>
+      <span className="sr-only">Loading</span>
     </div>
   )
 }
