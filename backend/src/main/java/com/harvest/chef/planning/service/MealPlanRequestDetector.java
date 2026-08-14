@@ -45,7 +45,15 @@ public class MealPlanRequestDetector {
     private int extractDayCount(String lower) {
         Matcher digits = DIGIT_DAYS.matcher(lower);
         if (digits.find()) {
-            return Integer.parseInt(digits.group(1));
+            try {
+                return Integer.parseInt(digits.group(1));
+            } catch (NumberFormatException e) {
+                // An absurdly large digit string ("999999999999 days") overflows int and would
+                // otherwise throw all the way up through CompositionService, turning a harmless
+                // request into a 500. clampToSupportedPlanSize would have collapsed any huge
+                // value to 7 anyway, so just fall through to that outcome directly.
+                return Integer.MAX_VALUE;
+            }
         }
         for (int i = NUMBER_WORDS.size() - 1; i >= 1; i--) {
             if (lower.contains(NUMBER_WORDS.get(i) + " day")) {
