@@ -1,7 +1,7 @@
 /* eslint-disable react/prop-types -- this project doesn't use PropTypes, see AuthContext.jsx */
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Send, ArrowUp, Quote, Users, ShoppingBag, Check } from 'lucide-react'
+import { ArrowUp, Quote, Users, ShoppingBag, Check } from 'lucide-react'
 import { chefChat, getErrorMessage } from '../services/api'
 
 const SOURCE_LABELS = {
@@ -88,6 +88,7 @@ function RecipeCard({ recipe }) {
                     <button
                       type="button"
                       onClick={() => toggleIngredient(index)}
+                      aria-pressed={isChecked}
                       className="group flex items-start gap-2.5 text-left w-full"
                     >
                       <span
@@ -254,7 +255,7 @@ function Chef() {
             What's in your kitchen today?
           </h1>
         </div>
-        <span className="hidden sm:flex w-9 h-9 rounded-full bg-gradient-to-br from-brick-400 to-brick-600 items-center justify-center">
+        <span aria-hidden="true" className="hidden sm:flex w-9 h-9 rounded-full bg-gradient-to-br from-brick-400 to-brick-600 items-center justify-center">
           <span className="w-2 h-2 rounded-full bg-paper-50/90" />
         </span>
       </div>
@@ -297,6 +298,7 @@ function Chef() {
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            aria-label="Message Chef Brain"
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
@@ -316,7 +318,11 @@ function Chef() {
             disabled={isSending || !input.trim()}
             aria-label="Send message"
           >
-            {isSending ? <ArrowUp className="w-4 h-4 animate-pulse" strokeWidth={1.75} /> : <Send className="w-4 h-4" strokeWidth={1.75} />}
+            {isSending ? (
+              <ArrowUp className="w-4 h-4 animate-pulse" strokeWidth={2} />
+            ) : (
+              <ArrowUp className="w-4 h-4" strokeWidth={2.25} />
+            )}
           </motion.button>
         </div>
       </form>
