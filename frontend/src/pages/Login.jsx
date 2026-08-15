@@ -83,6 +83,8 @@ function Login() {
               autoComplete="email"
               placeholder="you@example.com"
               className={`input-field ${errors.email ? 'border-brick-300' : ''}`}
+              aria-invalid={errors.email ? 'true' : 'false'}
+              aria-describedby={errors.email ? 'email-error' : undefined}
               {...register('email', {
                 required: 'Email is required',
                 pattern: {
@@ -92,7 +94,7 @@ function Login() {
               })}
             />
             {errors.email && (
-              <p className="mt-1 text-xs text-brick-500">{errors.email.message}</p>
+              <p id="email-error" className="mt-1 text-xs text-brick-500">{errors.email.message}</p>
             )}
           </div>
 
@@ -107,6 +109,8 @@ function Login() {
                 autoComplete="current-password"
                 placeholder="Enter your password"
                 className={`input-field pr-11 ${errors.password ? 'border-brick-300' : ''}`}
+                aria-invalid={errors.password ? 'true' : 'false'}
+                aria-describedby={errors.password ? 'password-error' : undefined}
                 {...register('password', {
                   required: 'Password is required',
                   minLength: { value: 6, message: 'Password must be at least 6 characters' },
@@ -122,7 +126,7 @@ function Login() {
               </button>
             </div>
             {errors.password && (
-              <p className="mt-1 text-xs text-brick-500">{errors.password.message}</p>
+              <p id="password-error" className="mt-1 text-xs text-brick-500">{errors.password.message}</p>
             )}
           </div>
 

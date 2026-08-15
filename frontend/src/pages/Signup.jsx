@@ -65,12 +65,14 @@ function Signup() {
               autoComplete="name"
               placeholder="Jane Doe"
               className={`input-field ${errors.name ? 'border-brick-300' : ''}`}
+              aria-invalid={errors.name ? 'true' : 'false'}
+              aria-describedby={errors.name ? 'name-error' : undefined}
               {...register('name', {
                 required: 'Name is required',
                 minLength: { value: 2, message: 'Name must be at least 2 characters' },
               })}
             />
-            {errors.name && <p className="mt-1 text-xs text-brick-500">{errors.name.message}</p>}
+            {errors.name && <p id="name-error" className="mt-1 text-xs text-brick-500">{errors.name.message}</p>}
           </div>
 
           <div>
@@ -83,6 +85,8 @@ function Signup() {
               autoComplete="email"
               placeholder="you@example.com"
               className={`input-field ${errors.email ? 'border-brick-300' : ''}`}
+              aria-invalid={errors.email ? 'true' : 'false'}
+              aria-describedby={errors.email ? 'email-error' : undefined}
               {...register('email', {
                 required: 'Email is required',
                 pattern: {
@@ -91,7 +95,7 @@ function Signup() {
                 },
               })}
             />
-            {errors.email && <p className="mt-1 text-xs text-brick-500">{errors.email.message}</p>}
+            {errors.email && <p id="email-error" className="mt-1 text-xs text-brick-500">{errors.email.message}</p>}
           </div>
 
           <div>
@@ -105,6 +109,8 @@ function Signup() {
                 autoComplete="new-password"
                 placeholder="Create a password"
                 className={`input-field pr-11 ${errors.password ? 'border-brick-300' : ''}`}
+                aria-invalid={errors.password ? 'true' : 'false'}
+                aria-describedby={errors.password ? 'signup-password-error' : undefined}
                 {...register('password', {
                   required: 'Password is required',
                   minLength: { value: 6, message: 'Password must be at least 6 characters' },
@@ -119,7 +125,7 @@ function Signup() {
                 {showPassword ? <EyeOff className="w-4 h-4" strokeWidth={1.75} /> : <Eye className="w-4 h-4" strokeWidth={1.75} />}
               </button>
             </div>
-            {errors.password && <p className="mt-1 text-xs text-brick-500">{errors.password.message}</p>}
+            {errors.password && <p id="signup-password-error" className="mt-1 text-xs text-brick-500">{errors.password.message}</p>}
           </div>
 
           <div>
@@ -132,13 +138,15 @@ function Signup() {
               autoComplete="new-password"
               placeholder="Confirm your password"
               className={`input-field ${errors.confirmPassword ? 'border-brick-300' : ''}`}
+              aria-invalid={errors.confirmPassword ? 'true' : 'false'}
+              aria-describedby={errors.confirmPassword ? 'confirm-password-error' : undefined}
               {...register('confirmPassword', {
                 required: 'Please confirm your password',
                 validate: (value) => value === watch('password') || 'Passwords do not match',
               })}
             />
             {errors.confirmPassword && (
-              <p className="mt-1 text-xs text-brick-500">{errors.confirmPassword.message}</p>
+              <p id="confirm-password-error" className="mt-1 text-xs text-brick-500">{errors.confirmPassword.message}</p>
             )}
           </div>
 
