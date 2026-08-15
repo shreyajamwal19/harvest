@@ -1,13 +1,26 @@
 /* eslint-disable react/prop-types -- this project doesn't use PropTypes, see AuthContext.jsx */
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowUp, Quote, Users, ShoppingBag, Check } from 'lucide-react'
+import { ArrowUp, Quote, Users, ShoppingBag, Check, ChefHat } from 'lucide-react'
 import { chefChat, getErrorMessage } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
 
 const SOURCE_LABELS = {
   local: 'Harvest recipe',
   themealdb: 'TheMealDB',
   generated: 'Chef-generated',
+}
+
+const RESPONSE_LABELS = {
+  CLARIFYING_QUESTION: { text: 'Quick question', dot: 'bg-gold-500' },
+  HONEST_NON_ANSWER: { text: 'Heads up', dot: 'bg-ink-700/40' },
+  TECHNIQUE_ANSWER: { text: 'Technique', dot: 'bg-moss-400' },
+  RECIPE: { text: 'Recipe', dot: 'bg-brick-400' },
+}
+
+function initials(name) {
+  if (!name) return '?'
+  return name.split(' ').filter(Boolean).slice(0, 2).map((p) => p[0].toUpperCase()).join('')
 }
 
 /** Renders a single recipe response as an editorial recipe card, including why it was chosen. */
@@ -144,35 +157,40 @@ function RecipeCard({ recipe }) {
 }
 
 /** One message turn, styled by role and (for the assistant) response type. */
-function MessageBubble({ turn }) {
+function MessageBubble({ turn, userName }) {
   const isUser = turn.role === 'user'
 
   if (isUser) {
     return (
-      <div className="flex justify-end">
-        <div className="max-w-[80%] bg-brick-500 text-paper-50 rounded-sheet rounded-br-sm px-4 py-2.5 text-sm leading-relaxed">
+      <div className="flex justify-end items-end gap-2.5">
+        <div className="max-w-[78%] bg-gradient-to-br from-brick-400 to-brick-600 text-paper-50 rounded-2xl rounded-br-md px-4 py-2.5 text-sm leading-relaxed shadow-soft">
           {turn.content}
         </div>
+        <span className="flex-shrink-0 w-7 h-7 rounded-full bg-paper-300 text-ink-700 text-[11px] font-semibold flex items-center justify-center">
+          {initials(userName)}
+        </span>
       </div>
     )
   }
 
-  const dotColor =
-    turn.responseType === 'CLARIFYING_QUESTION' ? 'bg-gold-500'
-    : turn.responseType === 'HONEST_NON_ANSWER' ? 'bg-ink-700/40'
-    : turn.responseType === 'TECHNIQUE_ANSWER' ? 'bg-moss-400'
-    : 'bg-brick-400'
+  const meta = RESPONSE_LABELS[turn.responseType] || RESPONSE_LABELS.RECIPE
 
   return (
-    <div className="flex justify-start">
-      <div className="max-w-[85%] w-full flex gap-3">
-        <span className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${dotColor}`} />
-        <div className="flex-1">
-          <div className="text-sm text-ink-700 leading-relaxed">{turn.content}</div>
-          {turn.recipes?.map((recipe, index) => (
-            <RecipeCard key={index} recipe={recipe} />
-          ))}
+    <div className="flex items-start gap-2.5">
+      <span className="flex-shrink-0 w-7 h-7 rounded-full bg-gradient-to-br from-ink-700 to-ink-800 flex items-center justify-center">
+        <ChefHat className="w-3.5 h-3.5 text-gold-300" strokeWidth={1.75} />
+      </span>
+      <div className="max-w-[85%] flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">{meta.text}</span>
         </div>
+        <div className="bg-paper-50 border border-ink-700/8 rounded-2xl rounded-tl-md px-4 py-3 text-sm text-ink-700 leading-relaxed shadow-soft">
+          {turn.content}
+        </div>
+        {turn.recipes?.map((recipe, index) => (
+          <RecipeCard key={index} recipe={recipe} />
+        ))}
       </div>
     </div>
   )
@@ -180,24 +198,26 @@ function MessageBubble({ turn }) {
 
 function TypingIndicator() {
   return (
-    <div className="flex justify-start">
-      <div className="border-l-2 border-ink-700/15 pl-4 py-2 w-full max-w-[85%] space-y-2 ml-[18px]">
-        <motion.div
-          className="h-2.5 rounded-full bg-ink-700/10 w-4/5"
-          animate={{ opacity: [0.4, 0.9, 0.4] }}
-          transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
-        />
-        <motion.div
-          className="h-2.5 rounded-full bg-ink-700/10 w-2/5"
-          animate={{ opacity: [0.4, 0.9, 0.4] }}
-          transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut', delay: 0.2 }}
-        />
+    <div className="flex items-start gap-2.5">
+      <span className="flex-shrink-0 w-7 h-7 rounded-full bg-gradient-to-br from-ink-700 to-ink-800 flex items-center justify-center">
+        <ChefHat className="w-3.5 h-3.5 text-gold-300" strokeWidth={1.75} />
+      </span>
+      <div className="bg-paper-50 border border-ink-700/8 rounded-2xl rounded-tl-md px-4 py-3.5 flex gap-1.5 shadow-soft">
+        {[0, 1, 2].map((i) => (
+          <motion.span
+            key={i}
+            className="w-1.5 h-1.5 bg-ink-400 rounded-full"
+            animate={{ y: [0, -4, 0] }}
+            transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15, ease: 'easeInOut' }}
+          />
+        ))}
       </div>
     </div>
   )
 }
 
 function Chef() {
+  const { user } = useAuth()
   const [sessionId, setSessionId] = useState(null)
   const [turns, setTurns] = useState([])
   const [input, setInput] = useState('')
@@ -255,15 +275,18 @@ function Chef() {
             What&apos;s in your kitchen today?
           </h1>
         </div>
-        <span aria-hidden="true" className="hidden sm:flex w-9 h-9 rounded-full bg-gradient-to-br from-brick-400 to-brick-600 items-center justify-center">
-          <span className="w-2 h-2 rounded-full bg-paper-50/90" />
+        <span aria-hidden="true" className="hidden sm:flex w-9 h-9 rounded-full bg-gradient-to-br from-ink-700 to-ink-800 items-center justify-center">
+          <ChefHat className="w-4 h-4 text-gold-300" strokeWidth={1.75} />
         </span>
       </div>
 
       <div className="flex-1 flex flex-col gap-4 mb-6 pb-20 min-h-[280px]">
         {turns.length === 0 && (
-          <div className="flex-1 flex items-center justify-center text-center px-6">
-            <p className="text-ink-400 text-sm max-w-sm leading-relaxed">
+          <div className="flex-1 flex flex-col items-center justify-center text-center px-6 gap-4">
+            <span className="w-12 h-12 rounded-full bg-gradient-to-br from-ink-700 to-ink-800 flex items-center justify-center">
+              <ChefHat className="w-5 h-5 text-gold-300" strokeWidth={1.75} />
+            </span>
+            <p className="text-ink-500 text-sm max-w-sm leading-relaxed">
               Try &ldquo;I have eggs, spinach and rice&rdquo;, &ldquo;I want authentic
               ramen&rdquo;, or &ldquo;my sauce split.&rdquo;
             </p>
@@ -278,7 +301,7 @@ function Chef() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
             >
-              <MessageBubble turn={turn} />
+              <MessageBubble turn={turn} userName={user?.name} />
             </motion.div>
           ))}
         </AnimatePresence>
