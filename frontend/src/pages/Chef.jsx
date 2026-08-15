@@ -260,7 +260,7 @@ function Chef() {
         </span>
       </div>
 
-      <div className="flex-1 flex flex-col gap-4 mb-6 min-h-[280px]">
+      <div className="flex-1 flex flex-col gap-4 mb-6 pb-20 min-h-[280px]">
         {turns.length === 0 && (
           <div className="flex-1 flex items-center justify-center text-center px-6">
             <p className="text-ink-400 text-sm max-w-sm leading-relaxed">
@@ -284,7 +284,7 @@ function Chef() {
         </AnimatePresence>
 
         {isSending && <TypingIndicator />}
-        <div ref={scrollAnchorRef} />
+        <div ref={scrollAnchorRef} className="scroll-mb-24" />
       </div>
 
       {error && (
