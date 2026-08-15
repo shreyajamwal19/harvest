@@ -80,6 +80,7 @@ function Login() {
             <input
               id="email"
               type="email"
+              autoComplete="email"
               placeholder="you@example.com"
               className={`input-field ${errors.email ? 'border-brick-300' : ''}`}
               {...register('email', {
@@ -103,6 +104,7 @@ function Login() {
               <input
                 id="password"
                 type={showPassword ? 'text' : 'password'}
+                autoComplete="current-password"
                 placeholder="Enter your password"
                 className={`input-field pr-11 ${errors.password ? 'border-brick-300' : ''}`}
                 {...register('password', {

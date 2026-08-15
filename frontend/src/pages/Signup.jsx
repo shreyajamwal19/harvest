@@ -62,6 +62,7 @@ function Signup() {
             <input
               id="name"
               type="text"
+              autoComplete="name"
               placeholder="Jane Doe"
               className={`input-field ${errors.name ? 'border-brick-300' : ''}`}
               {...register('name', {
@@ -79,6 +80,7 @@ function Signup() {
             <input
               id="email"
               type="email"
+              autoComplete="email"
               placeholder="you@example.com"
               className={`input-field ${errors.email ? 'border-brick-300' : ''}`}
               {...register('email', {
@@ -100,6 +102,7 @@ function Signup() {
               <input
                 id="password"
                 type={showPassword ? 'text' : 'password'}
+                autoComplete="new-password"
                 placeholder="Create a password"
                 className={`input-field pr-11 ${errors.password ? 'border-brick-300' : ''}`}
                 {...register('password', {
@@ -126,6 +129,7 @@ function Signup() {
             <input
               id="confirmPassword"
               type={showPassword ? 'text' : 'password'}
+              autoComplete="new-password"
               placeholder="Confirm your password"
               className={`input-field ${errors.confirmPassword ? 'border-brick-300' : ''}`}
               {...register('confirmPassword', {
