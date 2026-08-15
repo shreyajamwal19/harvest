@@ -104,21 +104,22 @@ function MessageBubble({ turn }) {
     )
   }
 
-  const accent =
-    turn.responseType === 'CLARIFYING_QUESTION' ? 'border-gold-500'
-    : turn.responseType === 'HONEST_NON_ANSWER' ? 'border-ink-700/20'
-    : turn.responseType === 'TECHNIQUE_ANSWER' ? 'border-moss-400'
-    : 'border-brick-400'
+  const dotColor =
+    turn.responseType === 'CLARIFYING_QUESTION' ? 'bg-gold-500'
+    : turn.responseType === 'HONEST_NON_ANSWER' ? 'bg-ink-700/40'
+    : turn.responseType === 'TECHNIQUE_ANSWER' ? 'bg-moss-400'
+    : 'bg-brick-400'
 
   return (
     <div className="flex justify-start">
-      <div className="max-w-[85%] w-full">
-        <div className={`border-l-2 ${accent} pl-4 py-0.5 text-sm text-ink-700 leading-relaxed`}>
-          {turn.content}
+      <div className="max-w-[85%] w-full flex gap-3">
+        <span className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${dotColor}`} />
+        <div className="flex-1">
+          <div className="text-sm text-ink-700 leading-relaxed">{turn.content}</div>
+          {turn.recipes?.map((recipe, index) => (
+            <RecipeCard key={index} recipe={recipe} />
+          ))}
         </div>
-        {turn.recipes?.map((recipe, index) => (
-          <RecipeCard key={index} recipe={recipe} />
-        ))}
       </div>
     </div>
   )
@@ -127,7 +128,7 @@ function MessageBubble({ turn }) {
 function TypingIndicator() {
   return (
     <div className="flex justify-start">
-      <div className="border-l-2 border-ink-700/15 pl-4 py-2 w-full max-w-[85%] space-y-2">
+      <div className="border-l-2 border-ink-700/15 pl-4 py-2 w-full max-w-[85%] space-y-2 ml-[18px]">
         <motion.div
           className="h-2.5 rounded-full bg-ink-700/10 w-4/5"
           animate={{ opacity: [0.4, 0.9, 0.4] }}
@@ -189,12 +190,21 @@ function Chef() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex flex-col max-w-3xl mx-auto px-4 sm:px-6 py-10">
-      <div className="mb-8 pb-6 border-b border-ink-700/10">
-        <span className="eyebrow">Chef Brain</span>
-        <h1 className="font-display text-2xl font-semibold text-ink-800 mt-1.5">
-          What's in your kitchen today?
-        </h1>
+    <div className="relative min-h-[calc(100vh-4rem)] flex flex-col max-w-3xl mx-auto px-4 sm:px-6 py-10">
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 h-72 -z-10 opacity-60"
+        style={{ background: 'radial-gradient(60% 100% at 50% 0%, rgba(74,21,24,0.06), transparent 70%)' }}
+      />
+      <div className="mb-8 pb-6 border-b border-ink-700/10 flex items-center justify-between">
+        <div>
+          <span className="eyebrow">Chef Brain</span>
+          <h1 className="font-display text-2xl font-semibold text-ink-800 mt-1.5">
+            What's in your kitchen today?
+          </h1>
+        </div>
+        <span className="hidden sm:flex w-9 h-9 rounded-full bg-gradient-to-br from-brick-400 to-brick-600 items-center justify-center">
+          <span className="w-2 h-2 rounded-full bg-paper-50/90" />
+        </span>
       </div>
 
       <div className="flex-1 flex flex-col gap-4 mb-6 min-h-[280px]">
@@ -230,29 +240,33 @@ function Chef() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="flex items-end gap-2 sticky bottom-4 pb-[env(safe-area-inset-bottom)]">
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault()
-              handleSubmit(e)
-            }
-          }}
-          placeholder="Tell Chef Brain what you have..."
-          rows={1}
-          className="input-field resize-none flex-1 shadow-lift"
-          disabled={isSending}
-        />
-        <button
-          type="submit"
-          className="btn-primary px-4 py-3 shadow-lift"
-          disabled={isSending || !input.trim()}
-          aria-label="Send message"
-        >
-          {isSending ? <ArrowUp className="w-4 h-4 animate-pulse" strokeWidth={1.75} /> : <Send className="w-4 h-4" strokeWidth={1.75} />}
-        </button>
+      <form onSubmit={handleSubmit} className="sticky bottom-4 pb-[env(safe-area-inset-bottom)]">
+        <div className="flex items-end gap-2 bg-paper-50 border border-ink-700/12 rounded-full pl-5 pr-1.5 py-1.5 shadow-lift focus-within:border-brick-400 focus-within:ring-2 focus-within:ring-brick-100 transition-all duration-200 ease-quiet">
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                handleSubmit(e)
+              }
+            }}
+            placeholder="Tell Chef Brain what you have…"
+            rows={1}
+            className="flex-1 resize-none bg-transparent border-0 outline-none py-2 text-sm text-ink-800 placeholder-ink-500/70"
+            disabled={isSending}
+          />
+          <motion.button
+            type="submit"
+            whileHover={{ scale: input.trim() ? 1.05 : 1 }}
+            whileTap={{ scale: 0.95 }}
+            className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-brick-400 to-brick-600 text-paper-50 flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed shadow-soft"
+            disabled={isSending || !input.trim()}
+            aria-label="Send message"
+          >
+            {isSending ? <ArrowUp className="w-4 h-4 animate-pulse" strokeWidth={1.75} /> : <Send className="w-4 h-4" strokeWidth={1.75} />}
+          </motion.button>
+        </div>
       </form>
     </div>
   )
