@@ -27,20 +27,42 @@ function Home() {
   return (
     <div className="min-h-[calc(100vh-4rem)]">
       {/* Hero */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-20 sm:pt-24 sm:pb-28">
+      <section className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-20 sm:pt-24 sm:pb-28 overflow-hidden">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.85 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 1.2, ease: [0.22, 1, 0.36, 1] }}
+          className="pointer-events-none absolute -top-24 -right-24 w-96 h-96 rounded-full bg-brick-100/40 blur-3xl -z-10"
+        />
         <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1fr] gap-12 items-end">
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-          >
-            <span className="eyebrow">Harvest</span>
-            <h1 className="mt-4 font-display text-5xl sm:text-6xl lg:text-[4.25rem] font-semibold text-ink-800 leading-[1.05] tracking-tight">
-              Cook with what
-              <br />
-              you <span className="italic text-brick-500">already have.</span>
+          <div>
+            <motion.span
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+              className="eyebrow inline-block"
+            >
+              Harvest
+            </motion.span>
+            <h1 className="mt-4 font-display text-5xl sm:text-6xl lg:text-[4.25rem] font-semibold text-ink-800 leading-[1.05] tracking-tight overflow-hidden">
+              <motion.span
+                className="block"
+                initial={{ y: '100%' }}
+                animate={{ y: 0 }}
+                transition={{ duration: 0.6, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+              >
+                Cook with what
+              </motion.span>
+              <motion.span
+                className="block"
+                initial={{ y: '100%' }}
+                animate={{ y: 0 }}
+                transition={{ duration: 0.6, delay: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              >
+                you <span className="italic text-brick-500">already have.</span>
+              </motion.span>
             </h1>
-          </motion.div>
+          </div>
 
           <motion.div
             initial={{ opacity: 0, y: 16 }}
@@ -78,7 +100,8 @@ function Home() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: '-60px' }}
                 transition={{ duration: 0.5, delay: index * 0.08, ease: [0.22, 1, 0.36, 1] }}
-                className="card-flat"
+                whileHover={{ y: -4 }}
+                className="card-flat transition-transform duration-300 ease-quiet"
               >
                 <span className="font-display text-sm text-brick-500/70">{item.index}</span>
                 <h3 className="font-display text-xl font-semibold text-ink-800 mt-2 mb-2">

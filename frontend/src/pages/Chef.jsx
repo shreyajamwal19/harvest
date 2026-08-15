@@ -16,7 +16,12 @@ function RecipeCard({ recipe }) {
   const sourceLabel = SOURCE_LABELS[recipe.source] || recipe.source
 
   return (
-    <div className="mt-3 bg-paper-50 border border-ink-700/10 rounded-sheet overflow-hidden">
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+      className="mt-3 bg-paper-50 border border-ink-700/10 rounded-sheet overflow-hidden shadow-soft hover:shadow-lift transition-shadow duration-300 ease-quiet"
+    >
       <div className="px-5 pt-5 pb-4 border-b border-ink-700/10">
         <div className="flex items-start justify-between gap-3">
           <h3 className="font-display text-xl font-semibold text-ink-800 leading-snug">
@@ -81,7 +86,7 @@ function RecipeCard({ recipe }) {
       {recipe.notes && (
         <p className="px-5 pb-5 text-xs text-ink-500 italic">{recipe.notes}</p>
       )}
-    </div>
+    </motion.div>
   )
 }
 
@@ -122,15 +127,17 @@ function MessageBubble({ turn }) {
 function TypingIndicator() {
   return (
     <div className="flex justify-start">
-      <div className="border-l-2 border-ink-700/15 pl-4 py-1 flex gap-1.5">
-        {[0, 1, 2].map((i) => (
-          <motion.span
-            key={i}
-            className="w-1.5 h-1.5 bg-ink-400 rounded-full"
-            animate={{ opacity: [0.25, 0.9, 0.25] }}
-            transition={{ duration: 1.1, repeat: Infinity, delay: i * 0.15 }}
-          />
-        ))}
+      <div className="border-l-2 border-ink-700/15 pl-4 py-2 w-full max-w-[85%] space-y-2">
+        <motion.div
+          className="h-2.5 rounded-full bg-ink-700/10 w-4/5"
+          animate={{ opacity: [0.4, 0.9, 0.4] }}
+          transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+        />
+        <motion.div
+          className="h-2.5 rounded-full bg-ink-700/10 w-2/5"
+          animate={{ opacity: [0.4, 0.9, 0.4] }}
+          transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut', delay: 0.2 }}
+        />
       </div>
     </div>
   )
