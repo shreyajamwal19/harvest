@@ -141,7 +141,7 @@ function Login() {
         </form>
 
         <p className="mt-8 text-center text-sm text-ink-500">
-          Don't have an account?{' '}
+          Don&apos;t have an account?{' '}
           <Link to="/signup" className="font-medium text-brick-500 hover:text-brick-600 transition-colors">
             Sign up
           </Link>

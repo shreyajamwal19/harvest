@@ -252,7 +252,7 @@ function Chef() {
         <div>
           <span className="eyebrow">Chef Brain</span>
           <h1 className="font-display text-2xl font-semibold text-ink-800 mt-1.5">
-            What's in your kitchen today?
+            What&apos;s in your kitchen today?
           </h1>
         </div>
         <span aria-hidden="true" className="hidden sm:flex w-9 h-9 rounded-full bg-gradient-to-br from-brick-400 to-brick-600 items-center justify-center">

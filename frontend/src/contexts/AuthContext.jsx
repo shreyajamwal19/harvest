@@ -77,7 +77,7 @@ export function AuthProvider({ children }) {
     // setUser(response.data.user)
     // scheduleAutoLogout(response.data.expiresAt)
     return response.data.user
-  }, [scheduleAutoLogout])
+  }, [])
 
   const logout = useCallback(async () => {
     clearLogoutTimer()

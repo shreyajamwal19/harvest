@@ -10,7 +10,7 @@ function ErrorPage() {
           This page wandered off
         </h1>
         <p className="text-sm text-ink-500 mb-8">
-          The page you're looking for doesn't exist, or has moved somewhere else.
+          The page you&apos;re looking for doesn&apos;t exist, or has moved somewhere else.
         </p>
         <Link to="/" className="btn-secondary inline-flex">
           <ArrowLeft className="w-4 h-4 mr-2" strokeWidth={1.75} />
