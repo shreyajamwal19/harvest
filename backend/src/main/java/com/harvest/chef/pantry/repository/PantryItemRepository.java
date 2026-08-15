@@ -17,6 +17,9 @@ public interface PantryItemRepository extends JpaRepository<PantryItem, Long> {
 
     Optional<PantryItem> findByUserIdAndIngredientName(Long userId, String ingredientName);
 
+    /** Ownership-scoped lookup so the REST API can never let a user delete another user's item. */
+    Optional<PantryItem> findByIdAndUserId(Long id, Long userId);
+
     @Modifying
     @Query("DELETE FROM PantryItem p WHERE p.userId = :userId AND LOWER(p.ingredientName) LIKE LOWER(CONCAT('%', :fragment, '%'))")
     int deleteByUserIdAndIngredientNameContaining(@Param("userId") Long userId, @Param("fragment") String fragment);

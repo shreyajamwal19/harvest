@@ -6,6 +6,7 @@ import Login from './pages/Login'
 import Signup from './pages/Signup'
 import Profile from './pages/Profile'
 import Chef from './pages/Chef'
+import Pantry from './pages/Pantry'
 import ErrorPage from './pages/ErrorPage'
 
 function App() {
@@ -18,6 +19,7 @@ function App() {
         <Route element={<ProtectedRoute />}>
           <Route path="/profile" element={<Profile />} />
           <Route path="/chef" element={<Chef />} />
+          <Route path="/pantry" element={<Pantry />} />
         </Route>
         <Route path="*" element={<ErrorPage />} />
       </Route>

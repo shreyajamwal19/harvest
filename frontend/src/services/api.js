@@ -65,4 +65,25 @@ export function chefChat({ sessionId, message }) {
   return api.post('/chef/chat', { sessionId, message })
 }
 
+/**
+ * Pantry API. Backed by the same PantryItem table the Chef Brain reads/writes via
+ * chat commands ("I bought eggs", "remove onions", ...) - changes made here or in
+ * chat show up in both places instantly.
+ */
+export function getPantryItems() {
+  return api.get('/pantry')
+}
+
+export function addPantryItem({ ingredientName, quantity, unit }) {
+  return api.post('/pantry', { ingredientName, quantity, unit })
+}
+
+export function removePantryItem(itemId) {
+  return api.delete(`/pantry/${itemId}`)
+}
+
+export function clearPantry() {
+  return api.delete('/pantry')
+}
+
 export default api

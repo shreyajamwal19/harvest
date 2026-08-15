@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 
@@ -56,11 +57,13 @@ public class PantryService {
      * Adds a new item or restocks an existing one. When {@code quantity} is non-null and the
      * item already exists, quantities are summed (a second "I bought eggs" adds to what's
      * already there rather than overwriting it) - matches the RESTOCK behaviour called for.
+     * Returns the saved entity so callers (e.g. the Pantry REST API) can render it immediately
+     * without a second read.
      */
     @Transactional
-    public void addOrRestock(Long userId, String ingredientName, Double quantity, String unit) {
+    public PantryItem addOrRestock(Long userId, String ingredientName, Double quantity, String unit) {
         if (userId == null || ingredientName == null || ingredientName.isBlank()) {
-            return;
+            return null;
         }
         String normalized = normalize(ingredientName);
         Optional<PantryItem> existing = pantryItemRepository.findByUserIdAndIngredientName(userId, normalized);
@@ -79,9 +82,38 @@ public class PantryService {
                 item.setUnit(unit);
             }
         }
-        pantryItemRepository.save(item);
+        PantryItem saved = pantryItemRepository.save(item);
         log.info("[pantry] add/restock userId={} ingredient='{}' quantity={} unit={}",
-                userId, normalized, item.getQuantity(), item.getUnit());
+                userId, normalized, saved.getQuantity(), saved.getUnit());
+        return saved;
+    }
+
+    /** Full entity list (with IDs), ordered - the basis for the Pantry page. Never throws. */
+    public List<PantryItem> listEntities(Long userId) {
+        if (userId == null) {
+            return List.of();
+        }
+        try {
+            return pantryItemRepository.findByUserIdOrderByIngredientNameAsc(userId);
+        } catch (Exception e) {
+            log.warn("[pantry] failed to list pantry for userId={}: {}", userId, e.getMessage());
+            return List.of();
+        }
+    }
+
+    /** Ownership-checked delete by id, for the Pantry page's remove button. Returns false if not found/owned. */
+    @Transactional
+    public boolean removeById(Long userId, Long itemId) {
+        if (userId == null || itemId == null) {
+            return false;
+        }
+        Optional<PantryItem> item = pantryItemRepository.findByIdAndUserId(itemId, userId);
+        if (item.isEmpty()) {
+            return false;
+        }
+        pantryItemRepository.delete(item.get());
+        log.info("[pantry] removeById userId={} itemId={}", userId, itemId);
+        return true;
     }
 
     /** Fully removes an item ("remove onions", "no more cheese"), regardless of quantity. */

@@ -19,7 +19,12 @@ function Navbar() {
 
   const navLinks = [
     { path: '/', label: 'Home' },
-    ...(isAuthenticated ? [{ path: '/chef', label: 'Chef Brain' }] : []),
+    ...(isAuthenticated
+      ? [
+          { path: '/chef', label: 'Chef Brain' },
+          { path: '/pantry', label: 'Pantry' },
+        ]
+      : []),
   ]
 
   return (
