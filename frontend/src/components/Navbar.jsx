@@ -110,7 +110,7 @@ function Navbar() {
                   key={link.path}
                   to={link.path}
                   onClick={() => setIsOpen(false)}
-                  className={`block px-2 py-3 text-base font-medium border-b border-ink-700/5 ${
+                  className={`block px-2 py-3.5 min-h-[44px] flex items-center text-base font-medium border-b border-ink-700/5 ${
                     isActive(link.path) ? 'text-ink-800' : 'text-ink-500'
                   }`}
                 >

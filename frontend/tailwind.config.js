@@ -18,7 +18,7 @@ export default {
         },
         // Warm near-black ink for text — never pure black
         ink: {
-          400: '#8A7F73',
+          400: '#6E6255',
           500: '#5B5147',
           600: '#463D34',
           700: '#332B24',

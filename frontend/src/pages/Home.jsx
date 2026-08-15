@@ -32,7 +32,7 @@ function Home() {
           initial={{ opacity: 0, scale: 0.85 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 1.2, ease: [0.22, 1, 0.36, 1] }}
-          className="pointer-events-none absolute -top-24 -right-24 w-96 h-96 rounded-full bg-brick-100/40 blur-3xl -z-10"
+          className="pointer-events-none absolute -top-24 -right-24 w-64 sm:w-96 h-64 sm:h-96 rounded-full bg-brick-100/40 blur-3xl -z-10"
         />
         <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1fr] gap-12 items-end">
           <div>

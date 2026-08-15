@@ -22,7 +22,7 @@ function RecipeCard({ recipe }) {
       transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
       className="mt-3 bg-paper-50 border border-ink-700/10 rounded-sheet overflow-hidden shadow-soft hover:shadow-lift transition-shadow duration-300 ease-quiet"
     >
-      <div className="px-5 pt-5 pb-4 border-b border-ink-700/10">
+      <div className="px-4 sm:px-5 pt-4 sm:pt-5 pb-4 border-b border-ink-700/10">
         <div className="flex items-start justify-between gap-3">
           <h3 className="font-display text-xl font-semibold text-ink-800 leading-snug">
             {recipe.title}
@@ -40,18 +40,18 @@ function RecipeCard({ recipe }) {
       </div>
 
       {recipe.rationale && (
-        <div className="px-5 py-3 bg-paper-200/50 border-b border-ink-700/10">
+        <div className="px-4 sm:px-5 py-3 bg-paper-200/50 border-b border-ink-700/10">
           <p className="text-sm text-ink-600 italic">{recipe.rationale}</p>
         </div>
       )}
 
       {recipe.missingIngredients?.length > 0 && (
-        <div className="px-5 py-3 bg-brick-50 border-b border-brick-100 text-sm text-brick-600">
+        <div className="px-4 sm:px-5 py-3 bg-brick-50 border-b border-brick-100 text-sm text-brick-600">
           Pick up: {recipe.missingIngredients.join(', ')}
         </div>
       )}
 
-      <div className="px-5 py-5 grid grid-cols-1 sm:grid-cols-[1fr_1.4fr] gap-6">
+      <div className="px-4 sm:px-5 py-4 sm:py-5 grid grid-cols-1 sm:grid-cols-[1fr_1.4fr] gap-5 sm:gap-6">
         {recipe.ingredients?.length > 0 && (
           <div>
             <h4 className="eyebrow mb-3">Ingredients</h4>
@@ -84,7 +84,7 @@ function RecipeCard({ recipe }) {
       </div>
 
       {recipe.notes && (
-        <p className="px-5 pb-5 text-xs text-ink-500 italic">{recipe.notes}</p>
+        <p className="px-4 sm:px-5 pb-4 sm:pb-5 text-xs text-ink-500 italic">{recipe.notes}</p>
       )}
     </motion.div>
   )
@@ -230,7 +230,7 @@ function Chef() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="flex items-end gap-2 sticky bottom-4">
+      <form onSubmit={handleSubmit} className="flex items-end gap-2 sticky bottom-4 pb-[env(safe-area-inset-bottom)]">
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
