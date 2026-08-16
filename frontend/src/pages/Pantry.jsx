@@ -2,14 +2,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Carrot,
-  Apple,
-  Beef,
-  Milk,
-  Wheat,
-  Snowflake,
-  Flame,
-  Package,
   Plus,
   X,
   AlertCircle,
@@ -25,18 +17,7 @@ import {
   getErrorMessage,
 } from '../services/api'
 import Loading from '../components/Loading'
-
-const CATEGORY_META = {
-  VEGETABLE: { label: 'Vegetables', icon: Carrot },
-  FRUIT: { label: 'Fruit', icon: Apple },
-  PROTEIN: { label: 'Protein', icon: Beef },
-  DAIRY: { label: 'Dairy', icon: Milk },
-  PANTRY_STAPLE: { label: 'Pantry Staples', icon: Wheat },
-  FROZEN: { label: 'Frozen', icon: Snowflake },
-  SPICE: { label: 'Spices & Seasonings', icon: Flame },
-  OTHER: { label: 'Other', icon: Package },
-}
-const CATEGORY_ORDER = Object.keys(CATEGORY_META)
+import { CATEGORY_META, CATEGORY_ORDER } from '../utils/pantryCategories'
 
 function formatQuantity(item) {
   if (item.quantity == null) return null

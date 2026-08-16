@@ -22,6 +22,7 @@ function Navbar() {
     ...(isAuthenticated
       ? [
           { path: '/chef', label: 'Chef Brain' },
+          { path: '/meal-plan', label: 'Meal Plan' },
           { path: '/pantry', label: 'Pantry' },
         ]
       : []),
