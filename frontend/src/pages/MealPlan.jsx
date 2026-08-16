@@ -1,5 +1,6 @@
 /* eslint-disable react/prop-types -- this project doesn't use PropTypes, see AuthContext.jsx */
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   CalendarDays,
@@ -9,6 +10,7 @@ import {
   Sparkles,
   Check,
   RefreshCw,
+  ChefHat,
 } from 'lucide-react'
 import { chefChat, getErrorMessage } from '../services/api'
 import Loading from '../components/Loading'
@@ -29,6 +31,7 @@ function buildMealPlanMessage(days, mealType) {
 
 function DayCard({ day, index, expanded, onToggle }) {
   const recipe = day.recipe
+  const navigate = useNavigate()
   return (
     <motion.div
       layout
@@ -110,6 +113,16 @@ function DayCard({ day, index, expanded, onToggle }) {
                     ))}
                   </ol>
                 </div>
+              )}
+              {recipe.steps?.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/cook', { state: { recipe } })}
+                  className="w-full flex items-center justify-center gap-2 text-sm font-semibold text-paper-50 bg-ink-800 hover:bg-ink-700 rounded-sheet py-3 transition-colors"
+                >
+                  <ChefHat className="w-4 h-4" strokeWidth={1.75} />
+                  Start Cooking
+                </button>
               )}
             </div>
           </motion.div>

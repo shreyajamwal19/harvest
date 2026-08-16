@@ -102,4 +102,9 @@ export function unsaveRecipe(savedRecipeId) {
   return api.delete(`/saved-recipes/${savedRecipeId}`)
 }
 
+/** Records a COOKED history event - called when Cooking Mode is completed. */
+export function markRecipeCooked(title) {
+  return api.post('/recipes/cooked', { title })
+}
+
 export default api

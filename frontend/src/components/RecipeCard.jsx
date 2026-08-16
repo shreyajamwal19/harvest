@@ -1,7 +1,8 @@
 /* eslint-disable react/prop-types -- this project doesn't use PropTypes, see AuthContext.jsx */
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Quote, Users, ShoppingBag, Check, Bookmark, Loader2 } from 'lucide-react'
+import { Quote, Users, ShoppingBag, Check, Bookmark, Loader2, ChefHat } from 'lucide-react'
 
 const SOURCE_LABELS = {
   local: 'Harvest recipe',
@@ -17,6 +18,7 @@ const SOURCE_LABELS = {
  */
 function RecipeCard({ recipe, onToggleSave, saved = false, savePending = false }) {
   const [checked, setChecked] = useState(() => new Set())
+  const navigate = useNavigate()
   if (!recipe) return null
   const sourceLabel = SOURCE_LABELS[recipe.source] || recipe.source
 
@@ -26,6 +28,10 @@ function RecipeCard({ recipe, onToggleSave, saved = false, savePending = false }
       next.has(index) ? next.delete(index) : next.add(index)
       return next
     })
+  }
+
+  const startCooking = () => {
+    navigate('/cook', { state: { recipe } })
   }
 
   return (
@@ -162,6 +168,19 @@ function RecipeCard({ recipe, onToggleSave, saved = false, savePending = false }
             <span className="not-italic font-semibold text-ink-600">Note — </span>
             {recipe.notes}
           </p>
+        </div>
+      )}
+
+      {recipe.steps?.length > 0 && (
+        <div className="mx-5 sm:mx-7 mb-6">
+          <button
+            type="button"
+            onClick={startCooking}
+            className="w-full flex items-center justify-center gap-2 text-sm font-semibold text-paper-50 bg-ink-800 hover:bg-ink-700 rounded-sheet py-3 transition-colors"
+          >
+            <ChefHat className="w-4 h-4" strokeWidth={1.75} />
+            Start Cooking
+          </button>
         </div>
       )}
     </motion.div>
