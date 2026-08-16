@@ -86,4 +86,20 @@ export function clearPantry() {
   return api.delete('/pantry')
 }
 
+/**
+ * Saved Recipes API. Backed by the SAVED history event that was already modeled but never
+ * had a caller - saving/unsaving here also logs that event for future personalization use.
+ */
+export function getSavedRecipes() {
+  return api.get('/saved-recipes')
+}
+
+export function saveRecipe(recipe) {
+  return api.post('/saved-recipes', recipe)
+}
+
+export function unsaveRecipe(savedRecipeId) {
+  return api.delete(`/saved-recipes/${savedRecipeId}`)
+}
+
 export default api

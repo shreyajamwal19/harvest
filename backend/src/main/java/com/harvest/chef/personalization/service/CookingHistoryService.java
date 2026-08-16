@@ -57,4 +57,26 @@ public class CookingHistoryService {
             log.warn("[personalization] failed to record history for userId={}: {}", userId, e.getMessage());
         }
     }
+
+    /**
+     * Records a single explicit event (SAVED, COOKED, REJECTED, ...) for one recipe - the
+     * generic hook the modeled-but-previously-unused {@link HistoryEventType} values were
+     * built for. Never throws; a history-logging failure must never break the action that
+     * triggered it (e.g. saving a recipe should still succeed even if this fails).
+     */
+    @Transactional
+    public void recordEvent(Long userId, String recipeTitle, HistoryEventType type) {
+        if (userId == null || recipeTitle == null || recipeTitle.isBlank() || type == null) {
+            return;
+        }
+        try {
+            historyRepository.save(RecipeHistoryEntry.builder()
+                    .userId(userId)
+                    .recipeTitle(recipeTitle.trim().toLowerCase(Locale.ROOT))
+                    .eventType(type)
+                    .build());
+        } catch (Exception e) {
+            log.warn("[personalization] failed to record {} event for userId={}: {}", type, userId, e.getMessage());
+        }
+    }
 }
