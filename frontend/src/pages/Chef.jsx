@@ -1,10 +1,12 @@
 /* eslint-disable react/prop-types -- this project doesn't use PropTypes, see AuthContext.jsx */
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowUp, ChefHat } from 'lucide-react'
+import { ArrowUp, ChefHat, Bookmark, BookmarkX } from 'lucide-react'
 import { chefChat, getSavedRecipes, saveRecipe, unsaveRecipe, getErrorMessage } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import RecipeCard from '../components/RecipeCard'
+import Toast from '../components/Toast'
 
 const RESPONSE_LABELS = {
   CLARIFYING_QUESTION: { text: 'Quick question', dot: 'bg-gold-500' },
@@ -99,6 +101,16 @@ function Chef() {
   // title (lowercased) -> saved-recipe id, so toggling knows whether to POST or DELETE.
   const [savedByTitle, setSavedByTitle] = useState(new Map())
   const [pendingTitles, setPendingTitles] = useState(new Set())
+  const [toast, setToast] = useState(null)
+  const toastTimerRef = useRef(null)
+
+  const showToast = useCallback((data) => {
+    clearTimeout(toastTimerRef.current)
+    setToast({ id: Date.now(), ...data })
+    toastTimerRef.current = setTimeout(() => setToast(null), 3200)
+  }, [])
+
+  useEffect(() => () => clearTimeout(toastTimerRef.current), [])
 
   useEffect(() => {
     scrollAnchorRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -132,13 +144,39 @@ function Chef() {
           next.delete(key)
           return next
         })
+        showToast({
+          tone: 'neutral',
+          icon: <BookmarkX className="w-4 h-4 text-paper-50" strokeWidth={2} />,
+          title: 'Removed from saved recipes',
+          subtitle: recipe.title,
+        })
       } else {
         const response = await saveRecipe(recipe)
         setSavedByTitle((prev) => new Map(prev).set(key, response.data.id))
+        showToast({
+          tone: 'success',
+          icon: <Bookmark className="w-4 h-4 text-paper-50" strokeWidth={2} fill="currentColor" />,
+          title: 'Saved to your collection',
+          subtitle: recipe.title,
+          action: (
+            <Link
+              to="/saved"
+              className="flex-shrink-0 text-xs font-semibold text-gold-300 hover:text-gold-200 transition-colors px-1"
+            >
+              View
+            </Link>
+          ),
+        })
       }
     } catch {
       // Optimistic-free by design here - state simply doesn't change, so the button stays
       // showing the truthful (unchanged) state rather than lying about success.
+      showToast({
+        tone: 'neutral',
+        icon: <BookmarkX className="w-4 h-4 text-paper-50" strokeWidth={2} />,
+        title: "Couldn't update saved recipes",
+        subtitle: 'Please try again',
+      })
     } finally {
       setPendingTitles((prev) => {
         const next = new Set(prev)
@@ -146,7 +184,7 @@ function Chef() {
         return next
       })
     }
-  }, [savedByTitle, pendingTitles])
+  }, [savedByTitle, pendingTitles, showToast])
 
   const sendMessage = useCallback(async (message) => {
     setError('')
@@ -274,6 +312,8 @@ function Chef() {
           </motion.button>
         </div>
       </form>
+
+      <Toast toast={toast} onDismiss={() => setToast(null)} />
     </div>
   )
 }

@@ -1,14 +1,26 @@
 /* eslint-disable react/prop-types -- this project doesn't use PropTypes, see AuthContext.jsx */
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
-import { Quote, Users, ShoppingBag, Check, Bookmark, Loader2, ChefHat } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Quote, Users, ShoppingBag, Check, Bookmark, Loader2, ChefHat, Sparkle } from 'lucide-react'
 
 const SOURCE_LABELS = {
   local: 'Harvest recipe',
   themealdb: 'TheMealDB',
   generated: 'Chef-generated',
 }
+
+// Small burst of sparkles fired from the bookmark button the instant a recipe is saved.
+const BURST_PARTICLES = Array.from({ length: 6 }).map((_, i) => {
+  const angle = (i / 6) * Math.PI * 2 - Math.PI / 2
+  const radius = 26
+  return {
+    x: Math.cos(angle) * radius,
+    y: Math.sin(angle) * radius,
+    delay: i * 0.02,
+    tone: i % 2 === 0 ? 'text-gold-400' : 'text-brick-400',
+  }
+})
 
 /**
  * Renders a single recipe as an editorial recipe card, including why it was chosen.
@@ -18,7 +30,20 @@ const SOURCE_LABELS = {
  */
 function RecipeCard({ recipe, onToggleSave, saved = false, savePending = false }) {
   const [checked, setChecked] = useState(() => new Set())
+  const [burst, setBurst] = useState(false)
+  const wasSavedRef = useRef(saved)
   const navigate = useNavigate()
+
+  useEffect(() => {
+    if (saved && !wasSavedRef.current) {
+      setBurst(true)
+      const timer = setTimeout(() => setBurst(false), 550)
+      wasSavedRef.current = saved
+      return () => clearTimeout(timer)
+    }
+    wasSavedRef.current = saved
+  }, [saved])
+
   if (!recipe) return null
   const sourceLabel = SOURCE_LABELS[recipe.source] || recipe.source
 
@@ -44,24 +69,46 @@ function RecipeCard({ recipe, onToggleSave, saved = false, savePending = false }
       <div className="h-1 bg-gradient-to-r from-brick-500 via-brick-400 to-gold-300" />
 
       {onToggleSave && (
-        <button
-          type="button"
-          onClick={onToggleSave}
-          disabled={savePending}
-          aria-pressed={saved}
-          aria-label={saved ? 'Remove from saved recipes' : 'Save this recipe'}
-          className={`absolute top-4 right-4 sm:right-6 z-10 flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center border transition-colors duration-150 disabled:opacity-50 ${
-            saved
-              ? 'bg-brick-500 border-brick-500 text-paper-50'
-              : 'bg-paper-50/90 border-ink-700/15 text-ink-500 hover:text-brick-500 hover:border-brick-300'
-          }`}
-        >
-          {savePending ? (
-            <Loader2 className="w-4 h-4 animate-spin" strokeWidth={2} />
-          ) : (
-            <Bookmark className="w-4 h-4" strokeWidth={2} fill={saved ? 'currentColor' : 'none'} />
-          )}
-        </button>
+        <div className="absolute top-4 right-4 sm:right-6 z-10">
+          <AnimatePresence>
+            {burst && (
+              <motion.div className="absolute inset-0 pointer-events-none">
+                {BURST_PARTICLES.map((p, i) => (
+                  <motion.span
+                    key={i}
+                    initial={{ x: 0, y: 0, opacity: 1, scale: 0.4 }}
+                    animate={{ x: p.x, y: p.y, opacity: 0, scale: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.5, delay: p.delay, ease: 'easeOut' }}
+                    className={`absolute top-1/2 left-1/2 ${p.tone}`}
+                  >
+                    <Sparkle className="w-3 h-3 -translate-x-1/2 -translate-y-1/2" fill="currentColor" strokeWidth={0} />
+                  </motion.span>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+          <motion.button
+            type="button"
+            onClick={onToggleSave}
+            disabled={savePending}
+            aria-pressed={saved}
+            aria-label={saved ? 'Remove from saved recipes' : 'Save this recipe'}
+            animate={burst ? { scale: [1, 1.28, 1] } : { scale: 1 }}
+            transition={{ duration: 0.4, ease: [0.34, 1.56, 0.64, 1] }}
+            className={`flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center border transition-colors duration-150 disabled:opacity-50 ${
+              saved
+                ? 'bg-brick-500 border-brick-500 text-paper-50'
+                : 'bg-paper-50/90 border-ink-700/15 text-ink-500 hover:text-brick-500 hover:border-brick-300'
+            }`}
+          >
+            {savePending ? (
+              <Loader2 className="w-4 h-4 animate-spin" strokeWidth={2} />
+            ) : (
+              <Bookmark className="w-4 h-4" strokeWidth={2} fill={saved ? 'currentColor' : 'none'} />
+            )}
+          </motion.button>
+        </div>
       )}
 
       <div className="px-5 sm:px-7 pt-6 pb-5">
