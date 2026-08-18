@@ -1,7 +1,10 @@
+/* eslint-disable react/prop-types -- this project doesn't use PropTypes, see AuthContext.jsx */
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, ChefHat, CalendarDays, ShoppingBasket, Bookmark } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import { getPantryItems, getSavedRecipes } from '../services/api'
 
 const capabilities = [
   {
@@ -21,8 +24,147 @@ const capabilities = [
   },
 ]
 
+function timeOfDayGreeting() {
+  const hour = new Date().getHours()
+  if (hour < 5) return 'Still up'
+  if (hour < 12) return 'Good morning'
+  if (hour < 17) return 'Good afternoon'
+  if (hour < 21) return 'Good evening'
+  return 'Good evening'
+}
+
+function firstName(fullName) {
+  return fullName?.trim().split(' ')[0] || 'there'
+}
+
+function QuickActionCard({ to, icon: Icon, title, description, badge, index }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.45, delay: 0.1 + index * 0.06, ease: [0.22, 1, 0.36, 1] }}
+    >
+      <Link
+        to={to}
+        className="group card flex items-start gap-4 hover:shadow-lift hover:-translate-y-0.5 transition-all duration-300 ease-quiet h-full"
+      >
+        <span className="flex-shrink-0 w-11 h-11 rounded-full bg-paper-200 text-brick-500 flex items-center justify-center group-hover:bg-brick-50 transition-colors">
+          <Icon className="w-5 h-5" strokeWidth={1.75} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center justify-between gap-2">
+            <span className="font-display text-lg font-semibold text-ink-800">{title}</span>
+            <ArrowRight
+              className="w-4 h-4 text-ink-400 flex-shrink-0 -translate-x-1 opacity-0 group-hover:translate-x-0 group-hover:opacity-100 transition-all duration-200"
+              strokeWidth={1.75}
+            />
+          </span>
+          <span className="block text-sm text-ink-500 mt-1 leading-relaxed">{description}</span>
+          {badge && (
+            <span className="inline-block mt-3 text-xs font-medium text-moss-500 bg-moss-50 border border-moss-100 rounded-full px-2.5 py-1">
+              {badge}
+            </span>
+          )}
+        </span>
+      </Link>
+    </motion.div>
+  )
+}
+
+function AuthenticatedHome({ userName }) {
+  const [pantryCount, setPantryCount] = useState(null)
+  const [savedCount, setSavedCount] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    getPantryItems()
+      .then((res) => !cancelled && setPantryCount(res.data.length))
+      .catch(() => {})
+    getSavedRecipes()
+      .then((res) => !cancelled && setSavedCount(res.data.length))
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const actions = [
+    {
+      to: '/chef',
+      icon: ChefHat,
+      title: 'Chef Brain',
+      description: 'Tell it what you have, or what you\u2019re craving.',
+      badge: null,
+    },
+    {
+      to: '/meal-plan',
+      icon: CalendarDays,
+      title: 'Meal Plan',
+      description: 'A pantry-aware plan for the week ahead.',
+      badge: null,
+    },
+    {
+      to: '/pantry',
+      icon: ShoppingBasket,
+      title: 'Pantry',
+      description: 'What Chef Brain knows you have on hand.',
+      badge: pantryCount === null ? null : `${pantryCount} item${pantryCount === 1 ? '' : 's'}`,
+    },
+    {
+      to: '/saved',
+      icon: Bookmark,
+      title: 'Saved Recipes',
+      description: 'Everything you\u2019ve bookmarked, in one place.',
+      badge: savedCount === null ? null : `${savedCount} saved`,
+    },
+  ]
+
+  return (
+    <div className="min-h-[calc(100vh-4rem)]">
+      <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-12 sm:pt-20">
+        <motion.span
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+          className="eyebrow inline-block"
+        >
+          Welcome back
+        </motion.span>
+        <motion.h1
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.55, delay: 0.05, ease: [0.22, 1, 0.36, 1] }}
+          className="mt-3 font-display text-4xl sm:text-5xl font-semibold text-ink-800 tracking-tight"
+        >
+          {timeOfDayGreeting()}, <span className="italic text-brick-500">{firstName(userName)}.</span>
+        </motion.h1>
+        <motion.p
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.12, ease: [0.22, 1, 0.36, 1] }}
+          className="mt-3 text-ink-500 max-w-md"
+        >
+          Where would you like to start?
+        </motion.p>
+      </section>
+
+      <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {actions.map((action, index) => (
+            <QuickActionCard key={action.to} index={index} {...action} />
+          ))}
+        </div>
+      </section>
+    </div>
+  )
+}
+
 function Home() {
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, user } = useAuth()
+
+  if (isAuthenticated) {
+    return <AuthenticatedHome userName={user?.name} />
+  }
 
   return (
     <div className="min-h-[calc(100vh-4rem)]">
@@ -75,15 +217,13 @@ function Home() {
               your kitchen into a recipe worth cooking tonight.
             </p>
             <div className="mt-6 flex flex-wrap items-center gap-4">
-              <Link to={isAuthenticated ? '/chef' : '/signup'} className="btn-primary">
-                {isAuthenticated ? 'Open Chef Brain' : 'Start cooking'}
+              <Link to="/signup" className="btn-primary">
+                Start cooking
                 <ArrowRight className="w-4 h-4 ml-2" strokeWidth={1.75} />
               </Link>
-              {!isAuthenticated && (
-                <Link to="/login" className="text-sm font-medium text-ink-600 hover:text-ink-800 transition-colors">
-                  Already have an account?
-                </Link>
-              )}
+              <Link to="/login" className="text-sm font-medium text-ink-600 hover:text-ink-800 transition-colors">
+                Already have an account?
+              </Link>
             </div>
           </motion.div>
         </div>

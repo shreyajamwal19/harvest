@@ -4,6 +4,16 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Menu, X, LogOut } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
+function initials(name) {
+  if (!name) return '?'
+  return name
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0].toUpperCase())
+    .join('')
+}
+
 function Navbar() {
   const [isOpen, setIsOpen] = useState(false)
   const { user, isAuthenticated, logout } = useAuth()
@@ -68,9 +78,15 @@ function Navbar() {
           {/* Desktop Auth */}
           <div className="hidden md:flex items-center gap-2">
             {isAuthenticated ? (
-              <div className="flex items-center gap-1">
-                <Link to="/profile" className="btn-ghost">
-                  {user?.name}
+              <div className="flex items-center gap-2">
+                <Link
+                  to="/profile"
+                  className="flex items-center gap-2 pl-1.5 pr-3 py-1.5 rounded-full hover:bg-paper-200 transition-colors"
+                >
+                  <span className="w-6 h-6 rounded-full bg-brick-500 text-paper-50 text-[11px] font-semibold flex items-center justify-center flex-shrink-0">
+                    {initials(user?.name)}
+                  </span>
+                  <span className="text-sm font-medium text-ink-700">{user?.name}</span>
                 </Link>
                 <button onClick={handleLogout} className="btn-ghost flex items-center gap-1.5">
                   <LogOut className="w-3.5 h-3.5" strokeWidth={1.75} />
@@ -130,9 +146,12 @@ function Navbar() {
                     <Link
                       to="/profile"
                       onClick={() => setIsOpen(false)}
-                      className="block px-2 py-2.5 text-sm font-medium text-ink-700"
+                      className="flex items-center gap-2.5 px-2 py-2.5"
                     >
-                      {user?.name}
+                      <span className="w-7 h-7 rounded-full bg-brick-500 text-paper-50 text-xs font-semibold flex items-center justify-center flex-shrink-0">
+                        {initials(user?.name)}
+                      </span>
+                      <span className="text-sm font-medium text-ink-700">{user?.name}</span>
                     </Link>
                     <button
                       onClick={() => { handleLogout(); setIsOpen(false); }}
