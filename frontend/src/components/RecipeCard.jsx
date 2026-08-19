@@ -31,6 +31,7 @@ const BURST_PARTICLES = Array.from({ length: 6 }).map((_, i) => {
 function RecipeCard({ recipe, onToggleSave, saved = false, savePending = false }) {
   const [checked, setChecked] = useState(() => new Set())
   const [burst, setBurst] = useState(false)
+  const [imageFailed, setImageFailed] = useState(false)
   const wasSavedRef = useRef(saved)
   const navigate = useNavigate()
 
@@ -66,7 +67,21 @@ function RecipeCard({ recipe, onToggleSave, saved = false, savePending = false }
       transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
       className="relative mt-3 bg-paper-50 border border-ink-700/10 rounded-sheet overflow-hidden shadow-soft hover:shadow-lift transition-shadow duration-300 ease-quiet"
     >
-      <div className="h-1 bg-gradient-to-r from-brick-500 via-brick-400 to-gold-300" />
+      {recipe.imageUrl && !imageFailed ? (
+        <div className="relative w-full aspect-[16/9] overflow-hidden bg-paper-200">
+          <img
+            src={recipe.imageUrl}
+            alt={recipe.title}
+            onError={() => setImageFailed(true)}
+            loading="lazy"
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-ink-900/55 via-ink-900/0 to-transparent" />
+          <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-brick-500 via-brick-400 to-gold-300" />
+        </div>
+      ) : (
+        <div className="h-1 bg-gradient-to-r from-brick-500 via-brick-400 to-gold-300" />
+      )}
 
       {onToggleSave && (
         <div className="absolute top-4 right-4 sm:right-6 z-10">

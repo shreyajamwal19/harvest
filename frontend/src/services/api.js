@@ -107,4 +107,9 @@ export function markRecipeCooked(title) {
   return api.post('/recipes/cooked', { title })
 }
 
+/** Public, unauthenticated - one real dish (with photo) for the logged-out homepage hero. */
+export function getShowcaseRecipe() {
+  return api.get('/public/showcase')
+}
+
 export default api

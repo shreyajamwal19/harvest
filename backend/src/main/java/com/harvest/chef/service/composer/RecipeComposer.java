@@ -115,6 +115,7 @@ public class RecipeComposer implements ResponseComposer {
                 .rationale(evaluated.getRationale())
                 .missingIngredients(evaluated.getMissingIngredients())
                 .source(candidate.getSource())
+                .imageUrl(candidate.getImageUrl())
                 .build();
     }
 

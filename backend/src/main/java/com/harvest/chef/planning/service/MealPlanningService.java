@@ -139,6 +139,7 @@ public class MealPlanningService {
                         ? "A solid pick for this day's meal plan." : String.join(" ", score.explanations()))
                 .missingIngredients(score.missingIngredients())
                 .source(candidate.getSource())
+                .imageUrl(candidate.getImageUrl())
                 .build();
     }
 

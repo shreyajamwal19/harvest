@@ -26,4 +26,5 @@ public class SaveRecipeRequest {
     private String rationale;
     private List<String> missingIngredients;
     private String source;
+    private String imageUrl;
 }

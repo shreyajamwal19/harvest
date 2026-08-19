@@ -33,4 +33,6 @@ public class RecipeResponse {
     private List<String> missingIngredients;
     /** "local", "themealdb", "generated", etc. */
     private String source;
+    /** Real photo URL from the source provider, when it has one. Null otherwise - never faked. */
+    private String imageUrl;
 }

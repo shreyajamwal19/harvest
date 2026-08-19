@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ArrowRight, ChefHat, CalendarDays, ShoppingBasket, Bookmark } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import { getPantryItems, getSavedRecipes } from '../services/api'
+import { getPantryItems, getSavedRecipes, getShowcaseRecipe } from '../services/api'
 
 const capabilities = [
   {
@@ -159,6 +159,61 @@ function AuthenticatedHome({ userName }) {
   )
 }
 
+function HeroShowcase() {
+  const [showcase, setShowcase] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    getShowcaseRecipe()
+      .then((res) => {
+        if (!cancelled && res.status === 200 && res.data?.imageUrl) setShowcase(res.data)
+      })
+      .catch(() => {})
+      .finally(() => !cancelled && setLoading(false))
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // Never render a broken/empty frame - if there's no real photo, the hero
+  // simply stays single-column rather than showing a fake placeholder.
+  if (!loading && !showcase) return null
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.96 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.8, delay: 0.25, ease: [0.22, 1, 0.36, 1] }}
+      className="relative hidden lg:block"
+    >
+      <div className="pointer-events-none absolute -z-10 -bottom-4 -right-4 w-full h-full rounded-sheet border border-brick-300/50" />
+      <div className="relative aspect-[3/4] rounded-sheet overflow-hidden border border-ink-700/10 shadow-lift bg-paper-200">
+        {loading || !showcase ? (
+          <div className="w-full h-full animate-pulse bg-paper-300/70" />
+        ) : (
+          <>
+            <img
+              src={showcase.imageUrl}
+              alt={showcase.title}
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-ink-900/75 via-ink-900/5 to-transparent" />
+            <div className="absolute bottom-0 left-0 right-0 p-5">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-gold-300">
+                From the kitchen
+              </span>
+              <p className="font-display text-lg font-semibold text-paper-50 mt-1 leading-snug">
+                {showcase.title}
+              </p>
+            </div>
+          </>
+        )}
+      </div>
+    </motion.div>
+  )
+}
+
 function Home() {
   const { isAuthenticated, user } = useAuth()
 
@@ -176,7 +231,7 @@ function Home() {
           transition={{ duration: 1.2, ease: [0.22, 1, 0.36, 1] }}
           className="pointer-events-none absolute -top-24 -right-24 w-64 sm:w-96 h-64 sm:h-96 rounded-full bg-brick-100/40 blur-3xl -z-10"
         />
-        <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1fr] gap-12 items-end">
+        <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.8fr] gap-12 lg:gap-16 items-center">
           <div>
             <motion.span
               initial={{ opacity: 0, y: 10 }}
@@ -204,28 +259,30 @@ function Home() {
                 you <span className="italic text-brick-500">already have.</span>
               </motion.span>
             </h1>
+
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.32, ease: [0.22, 1, 0.36, 1] }}
+              className="mt-6 max-w-md"
+            >
+              <p className="text-lg text-ink-600 leading-relaxed">
+                No shopping list required. Harvest turns the ingredients already in
+                your kitchen into a recipe worth cooking tonight.
+              </p>
+              <div className="mt-6 flex flex-wrap items-center gap-4">
+                <Link to="/signup" className="btn-primary">
+                  Start cooking
+                  <ArrowRight className="w-4 h-4 ml-2" strokeWidth={1.75} />
+                </Link>
+                <Link to="/login" className="text-sm font-medium text-ink-600 hover:text-ink-800 transition-colors">
+                  Already have an account?
+                </Link>
+              </div>
+            </motion.div>
           </div>
 
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
-            className="lg:pb-2"
-          >
-            <p className="text-lg text-ink-600 leading-relaxed">
-              No shopping list required. Harvest turns the ingredients already in
-              your kitchen into a recipe worth cooking tonight.
-            </p>
-            <div className="mt-6 flex flex-wrap items-center gap-4">
-              <Link to="/signup" className="btn-primary">
-                Start cooking
-                <ArrowRight className="w-4 h-4 ml-2" strokeWidth={1.75} />
-              </Link>
-              <Link to="/login" className="text-sm font-medium text-ink-600 hover:text-ink-800 transition-colors">
-                Already have an account?
-              </Link>
-            </div>
-          </motion.div>
+          <HeroShowcase />
         </div>
       </section>
 

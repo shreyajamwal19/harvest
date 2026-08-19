@@ -74,6 +74,11 @@ public class MealDbRecipeApiClient implements ExternalRecipeApiClient {
 
         List<String> steps = splitInstructions(meal.path("strInstructions").asText(""));
 
+        String imageUrl = meal.path("strMealThumb").asText(null);
+        if (imageUrl != null && imageUrl.isBlank()) {
+            imageUrl = null;
+        }
+
         return RecipeCandidate.builder()
                 .title(meal.path("strMeal").asText("Untitled dish"))
                 .description("A " + meal.path("strArea").asText("") + " " + meal.path("strCategory").asText("")
@@ -82,6 +87,7 @@ public class MealDbRecipeApiClient implements ExternalRecipeApiClient {
                 .ingredients(ingredients)
                 .steps(steps)
                 .source(apiName())
+                .imageUrl(imageUrl)
                 .build();
     }
 

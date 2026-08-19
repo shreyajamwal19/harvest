@@ -89,6 +89,7 @@ public class SavedRecipeService {
                 .rationale(request.getRationale())
                 .missingIngredients(request.getMissingIngredients())
                 .source(request.getSource())
+                .imageUrl(request.getImageUrl())
                 .build();
     }
 
