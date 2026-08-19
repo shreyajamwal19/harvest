@@ -2,6 +2,7 @@ package com.harvest.chef.controller;
 
 import com.harvest.chef.pantry.dto.PantryItemRequest;
 import com.harvest.chef.pantry.dto.PantryItemResponse;
+import com.harvest.chef.pantry.dto.PantryQuantityUpdateRequest;
 import com.harvest.chef.pantry.entity.PantryItem;
 import com.harvest.chef.pantry.service.PantryService;
 import com.harvest.entity.User;
@@ -58,6 +59,32 @@ public class PantryController {
             throw new ResourceNotFoundException("Pantry item not found");
         }
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Sets an item's quantity directly (the Pantry page's +/- stepper). A quantity of 0 or
+     * below removes the item outright rather than leaving a stale "0 units" row around -
+     * matches the same "ran out" semantics the chat pantry commands already use.
+     */
+    @PatchMapping("/{itemId}")
+    public ResponseEntity<PantryItemResponse> updateQuantity(@AuthenticationPrincipal UserDetails userDetails,
+                                                               @PathVariable Long itemId,
+                                                               @Valid @RequestBody PantryQuantityUpdateRequest request) {
+        Long userId = resolveUserId(userDetails);
+
+        if (request.getQuantity() <= 0) {
+            boolean removed = pantryService.removeById(userId, itemId);
+            if (!removed) {
+                throw new ResourceNotFoundException("Pantry item not found");
+            }
+            return ResponseEntity.noContent().build();
+        }
+
+        PantryItem updated = pantryService.updateQuantity(userId, itemId, request.getQuantity());
+        if (updated == null) {
+            throw new ResourceNotFoundException("Pantry item not found");
+        }
+        return ResponseEntity.ok(PantryItemResponse.from(updated));
     }
 
     @DeleteMapping

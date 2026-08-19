@@ -116,6 +116,27 @@ public class PantryService {
         return true;
     }
 
+    /**
+     * Sets (not adds to) an item's quantity directly - the Pantry page's +/- stepper. Returns
+     * null if the item doesn't exist or isn't owned by this user, so the controller can 404
+     * rather than silently no-op.
+     */
+    @Transactional
+    public PantryItem updateQuantity(Long userId, Long itemId, Double quantity) {
+        if (userId == null || itemId == null || quantity == null) {
+            return null;
+        }
+        Optional<PantryItem> found = pantryItemRepository.findByIdAndUserId(itemId, userId);
+        if (found.isEmpty()) {
+            return null;
+        }
+        PantryItem item = found.get();
+        item.setQuantity(quantity);
+        PantryItem saved = pantryItemRepository.save(item);
+        log.info("[pantry] updateQuantity userId={} itemId={} quantity={}", userId, itemId, quantity);
+        return saved;
+    }
+
     /** Fully removes an item ("remove onions", "no more cheese"), regardless of quantity. */
     @Transactional
     public int remove(Long userId, String ingredientFragment) {

@@ -32,6 +32,9 @@ function buildMealPlanMessage(days, mealType) {
 function DayCard({ day, index, expanded, onToggle }) {
   const recipe = day.recipe
   const navigate = useNavigate()
+  const [imageFailed, setImageFailed] = useState(false)
+  const hasImage = recipe?.imageUrl && !imageFailed
+
   return (
     <motion.div
       layout
@@ -42,9 +45,22 @@ function DayCard({ day, index, expanded, onToggle }) {
     >
       <button
         onClick={onToggle}
-        className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left"
+        className="w-full flex items-center gap-3 px-4 sm:px-5 py-3.5 text-left"
       >
-        <div className="min-w-0">
+        {hasImage ? (
+          <img
+            src={recipe.imageUrl}
+            alt=""
+            onError={() => setImageFailed(true)}
+            loading="lazy"
+            className="flex-shrink-0 w-12 h-12 rounded-full object-cover border border-ink-700/10"
+          />
+        ) : (
+          <span className="flex-shrink-0 w-12 h-12 rounded-full bg-paper-200 flex items-center justify-center">
+            <ChefHat className="w-5 h-5 text-moss-400" strokeWidth={1.75} />
+          </span>
+        )}
+        <div className="min-w-0 flex-1">
           <span className="text-xs font-semibold uppercase tracking-[0.14em] text-moss-400">
             {day.dayLabel}
           </span>
@@ -67,6 +83,12 @@ function DayCard({ day, index, expanded, onToggle }) {
             transition={{ duration: 0.2 }}
             className="overflow-hidden border-t border-ink-700/10"
           >
+            {hasImage && (
+              <div className="relative w-full aspect-[21/9] overflow-hidden bg-paper-200">
+                <img src={recipe.imageUrl} alt={recipe.title} className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-gradient-to-t from-ink-900/40 via-transparent to-transparent" />
+              </div>
+            )}
             <div className="px-5 py-4 space-y-4">
               {recipe.description && (
                 <p className="text-sm text-ink-600">{recipe.description}</p>

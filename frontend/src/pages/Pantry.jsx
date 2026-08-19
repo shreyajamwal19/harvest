@@ -1,18 +1,12 @@
 /* eslint-disable react/prop-types -- this project doesn't use PropTypes, see AuthContext.jsx */
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import {
-  Plus,
-  X,
-  AlertCircle,
-  Clock,
-  Trash2,
-  ShoppingBasket,
-} from 'lucide-react'
+import { Plus, X, AlertCircle, Clock, Trash2, ShoppingBasket, Minus } from 'lucide-react'
 import {
   getPantryItems,
   addPantryItem,
   removePantryItem,
+  updatePantryItemQuantity,
   clearPantry,
   getErrorMessage,
 } from '../services/api'
@@ -29,8 +23,36 @@ function capitalize(text) {
   return text.charAt(0).toUpperCase() + text.slice(1)
 }
 
-function PantryItemRow({ item, onRemove, removing }) {
-  const qty = formatQuantity(item)
+function QuantityStepper({ item, onChange, disabled }) {
+  const step = Number.isInteger(item.quantity) ? 1 : 0.5
+  return (
+    <span className="flex-shrink-0 flex items-center gap-1 bg-paper-200 rounded-full p-0.5">
+      <button
+        type="button"
+        onClick={() => onChange(item.id, Math.max(0, item.quantity - step))}
+        disabled={disabled}
+        aria-label={`Decrease ${item.ingredientName} quantity`}
+        className="w-5 h-5 rounded-full flex items-center justify-center text-ink-500 hover:bg-paper-50 hover:text-brick-500 transition-colors disabled:opacity-40"
+      >
+        <Minus className="w-3 h-3" strokeWidth={2} />
+      </button>
+      <span className="text-xs font-medium text-ink-600 min-w-[2.5rem] text-center tabular-nums">
+        {formatQuantity(item)}
+      </span>
+      <button
+        type="button"
+        onClick={() => onChange(item.id, item.quantity + step)}
+        disabled={disabled}
+        aria-label={`Increase ${item.ingredientName} quantity`}
+        className="w-5 h-5 rounded-full flex items-center justify-center text-ink-500 hover:bg-paper-50 hover:text-moss-500 transition-colors disabled:opacity-40"
+      >
+        <Plus className="w-3 h-3" strokeWidth={2} />
+      </button>
+    </span>
+  )
+}
+
+function PantryItemRow({ item, onRemove, onQuantityChange, removing }) {
   return (
     <motion.li
       layout
@@ -44,11 +66,6 @@ function PantryItemRow({ item, onRemove, removing }) {
         <span className="text-sm font-medium text-ink-800 truncate">
           {capitalize(item.ingredientName)}
         </span>
-        {qty && (
-          <span className="flex-shrink-0 text-xs font-medium text-ink-500 bg-paper-200 rounded-full px-2 py-0.5">
-            {qty}
-          </span>
-        )}
         {item.expiringSoon && (
           <span className="flex-shrink-0 inline-flex items-center gap-1 text-xs font-medium text-brick-400 bg-brick-50 border border-brick-100 rounded-full px-2 py-0.5">
             <Clock className="w-3 h-3" />
@@ -56,14 +73,21 @@ function PantryItemRow({ item, onRemove, removing }) {
           </span>
         )}
       </div>
-      <button
-        onClick={() => onRemove(item.id)}
-        disabled={removing}
-        aria-label={`Remove ${item.ingredientName}`}
-        className="flex-shrink-0 p-1.5 rounded-sheet text-ink-400 hover:text-brick-400 hover:bg-brick-50 transition-colors disabled:opacity-40"
-      >
-        <X className="w-4 h-4" strokeWidth={1.75} />
-      </button>
+      <div className="flex items-center gap-2 flex-shrink-0">
+        {item.quantity != null ? (
+          <QuantityStepper item={item} onChange={onQuantityChange} disabled={removing} />
+        ) : (
+          <span className="text-xs text-ink-400 italic">no amount set</span>
+        )}
+        <button
+          onClick={() => onRemove(item.id)}
+          disabled={removing}
+          aria-label={`Remove ${item.ingredientName}`}
+          className="p-1.5 rounded-sheet text-ink-400 hover:text-brick-400 hover:bg-brick-50 transition-colors disabled:opacity-40"
+        >
+          <X className="w-4 h-4" strokeWidth={1.75} />
+        </button>
+      </div>
     </motion.li>
   )
 }
@@ -107,6 +131,8 @@ function Pantry() {
     return map
   }, [items])
 
+  const expiringItems = useMemo(() => items.filter((i) => i.expiringSoon), [items])
+
   const handleAdd = async (e) => {
     e.preventDefault()
     const trimmed = name.trim()
@@ -147,6 +173,24 @@ function Pantry() {
     }
   }
 
+  const handleQuantityChange = async (itemId, newQuantity) => {
+    const previous = items
+    if (newQuantity <= 0) {
+      setItems((prev) => prev.filter((i) => i.id !== itemId))
+    } else {
+      setItems((prev) => prev.map((i) => (i.id === itemId ? { ...i, quantity: newQuantity } : i)))
+    }
+    try {
+      const response = await updatePantryItemQuantity(itemId, newQuantity)
+      if (response.data) {
+        setItems((prev) => prev.map((i) => (i.id === itemId ? response.data : i)))
+      }
+    } catch (err) {
+      setItems(previous)
+      setError(getErrorMessage(err, "Couldn't update that quantity. Please try again."))
+    }
+  }
+
   const handleClearAll = async () => {
     if (items.length === 0) return
     if (!window.confirm('Clear your entire pantry? This cannot be undone.')) return
@@ -162,14 +206,18 @@ function Pantry() {
 
   return (
     <div className="min-h-[calc(100vh-4rem)] max-w-3xl mx-auto px-4 sm:px-6 py-10">
-      <div className="flex items-center justify-between gap-3 mb-8">
+      <div className="flex items-start justify-between gap-3 mb-6">
         <div>
           <span className="eyebrow">Kitchen</span>
           <h1 className="font-display text-3xl font-semibold text-ink-800 tracking-tight mt-1">
             My Pantry
           </h1>
           <p className="text-sm text-ink-500 mt-1">
-            What Chef Brain knows you have on hand.
+            What Chef Brain knows you have on hand
+            {items.length > 0 && (
+              <span className="text-ink-400"> &middot; {items.length} item{items.length === 1 ? '' : 's'}</span>
+            )}
+            .
           </p>
         </div>
         {items.length > 0 && (
@@ -182,6 +230,39 @@ function Pantry() {
           </button>
         )}
       </div>
+
+      {expiringItems.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: -6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="mb-6 rounded-sheet border border-brick-200 bg-brick-50 px-4 py-3.5"
+        >
+          <div className="flex items-center gap-2 mb-2.5">
+            <Clock className="w-4 h-4 text-brick-500" strokeWidth={1.75} />
+            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-brick-600">
+              Use these soon
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {expiringItems.map((item) => (
+              <span
+                key={item.id}
+                className="inline-flex items-center gap-1.5 text-sm text-ink-700 bg-paper-50 border border-brick-100 rounded-full pl-3 pr-1.5 py-1"
+              >
+                {capitalize(item.ingredientName)}
+                <button
+                  onClick={() => handleRemove(item.id)}
+                  aria-label={`Remove ${item.ingredientName}`}
+                  className="w-4 h-4 rounded-full flex items-center justify-center text-ink-400 hover:text-brick-500 hover:bg-brick-50 transition-colors"
+                >
+                  <X className="w-2.5 h-2.5" strokeWidth={2} />
+                </button>
+              </span>
+            ))}
+          </div>
+        </motion.div>
+      )}
 
       {/* Quick add form */}
       <form onSubmit={handleAdd} className="card mb-6 !p-4">
@@ -268,6 +349,7 @@ function Pantry() {
                         key={item.id}
                         item={item}
                         onRemove={handleRemove}
+                        onQuantityChange={handleQuantityChange}
                         removing={removingId === item.id}
                       />
                     ))}

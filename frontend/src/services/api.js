@@ -82,6 +82,10 @@ export function removePantryItem(itemId) {
   return api.delete(`/pantry/${itemId}`)
 }
 
+export function updatePantryItemQuantity(itemId, quantity) {
+  return api.patch(`/pantry/${itemId}`, { quantity })
+}
+
 export function clearPantry() {
   return api.delete('/pantry')
 }
