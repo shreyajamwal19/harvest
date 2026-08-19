@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types -- this project doesn't use PropTypes, see AuthContext.jsx */
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowUp, ChefHat, Bookmark, BookmarkX } from 'lucide-react'
 import { chefChat, getSavedRecipes, saveRecipe, unsaveRecipe, getErrorMessage } from '../services/api'
@@ -91,9 +91,10 @@ function TypingIndicator() {
 
 function Chef() {
   const { user } = useAuth()
+  const location = useLocation()
   const [sessionId, setSessionId] = useState(null)
   const [turns, setTurns] = useState([])
-  const [input, setInput] = useState('')
+  const [input, setInput] = useState(() => location.state?.prefill || '')
   const [isSending, setIsSending] = useState(false)
   const [error, setError] = useState('')
   const scrollAnchorRef = useRef(null)

@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -36,15 +37,18 @@ public class PublicShowcaseController {
     private final List<ExternalRecipeApiClient> externalRecipeApiClients;
 
     @GetMapping("/showcase")
-    public ResponseEntity<ShowcaseRecipeResponse> showcase() {
+    public ResponseEntity<ShowcaseRecipeResponse> showcase(
+            @RequestParam(required = false) String query) {
         if (externalRecipeApiClients.isEmpty()) {
             return ResponseEntity.noContent().build();
         }
 
-        String query = SHOWCASE_QUERIES.get(ThreadLocalRandom.current().nextInt(SHOWCASE_QUERIES.size()));
+        String effectiveQuery = (query == null || query.isBlank())
+                ? SHOWCASE_QUERIES.get(ThreadLocalRandom.current().nextInt(SHOWCASE_QUERIES.size()))
+                : query.trim();
 
         for (ExternalRecipeApiClient client : externalRecipeApiClients) {
-            Optional<RecipeCandidate> withImage = safeSearch(client, query).stream()
+            Optional<RecipeCandidate> withImage = safeSearch(client, effectiveQuery).stream()
                     .filter(candidate -> candidate.getImageUrl() != null && !candidate.getImageUrl().isBlank())
                     .findFirst();
             if (withImage.isPresent()) {

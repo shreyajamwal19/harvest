@@ -138,7 +138,21 @@ public class CompositionService {
 
     /** MEAL_PLANNING - the deterministic engine chooses every day's recipe; see MealPlanningService. */
     private ChefResponse composeMealPlan(ConversationContext context, MealPlanRequest request) {
-        MealPlanResponse plan = mealPlanningService.generate(context, request.days(), request.mealType());
+        MealPlanResponse plan;
+        try {
+            plan = mealPlanningService.generate(context, request.days(), request.mealType());
+        } catch (Exception e) {
+            // A meal plan touches the most moving parts in the app in one call (retrieval,
+            // scoring, category classification, history, session state) - any single failure
+            // in there should degrade to an honest "couldn't build a plan" message, never a
+            // raw 500 to the person using the Meal Plan page.
+            log.error("[meal-plan] generation failed unexpectedly for userId={}", context.getUserId(), e);
+            return ChefResponse.builder()
+                    .type(ChefResponseType.MEAL_PLAN)
+                    .message("I couldn't put together a meal plan just now. Please try again in a moment.")
+                    .mealPlan(MealPlanResponse.builder().days(List.of()).build())
+                    .build();
+        }
 
         if (plan.getDays().isEmpty()) {
             return ChefResponse.builder()
@@ -173,7 +187,17 @@ public class CompositionService {
         }
 
         PantrySnapshot pantry = context.getPantry();
-        ShoppingListResponse list = shoppingListService.generate(source, pantry);
+        ShoppingListResponse list;
+        try {
+            list = shoppingListService.generate(source, pantry);
+        } catch (Exception e) {
+            log.error("[shopping-list] generation failed unexpectedly for userId={}", context.getUserId(), e);
+            return ChefResponse.builder()
+                    .type(ChefResponseType.SHOPPING_LIST)
+                    .message("I couldn't build a grocery list just now. Please try again in a moment.")
+                    .shoppingList(ShoppingListResponse.builder().categories(List.of()).build())
+                    .build();
+        }
 
         if (list.getCategories().isEmpty()) {
             return ChefResponse.builder()
