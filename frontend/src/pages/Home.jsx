@@ -75,7 +75,7 @@ function DishCard({ dish, index }) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: 0.1 + index * 0.06, ease: [0.22, 1, 0.36, 1] }}
       onClick={() => navigate('/chef', { state: { prefill: `I want to make ${dish.title}` } })}
-      className="group text-left rounded-sheet overflow-hidden border border-ink-700/10 bg-paper-50 shadow-soft hover:shadow-lift transition-shadow duration-300 ease-quiet"
+      className="group flex flex-col h-full text-left rounded-sheet overflow-hidden border border-ink-700/10 bg-paper-50 shadow-soft hover:shadow-lift transition-shadow duration-300 ease-quiet"
     >
       <div className="relative aspect-square overflow-hidden bg-paper-200">
         {dish.imageUrl && !imageFailed ? (
@@ -92,7 +92,7 @@ function DishCard({ dish, index }) {
           </div>
         )}
       </div>
-      <div className="p-3.5">
+      <div className="p-3.5 flex-1 flex flex-col">
         <p className="font-display text-base font-semibold text-ink-800 leading-snug line-clamp-1">
           {dish.title}
         </p>
@@ -110,7 +110,7 @@ function ChefBrainCompanionCard() {
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45, delay: 0.35, ease: [0.22, 1, 0.36, 1] }}
-      className="rounded-sheet bg-ink-800 p-6 flex flex-col justify-between min-h-[220px]"
+      className="rounded-sheet bg-ink-800 p-6 flex flex-col justify-between h-full min-h-[220px]"
     >
       <div>
         <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-gold-300">
@@ -254,13 +254,13 @@ function AuthenticatedHome({ userName }) {
               Tonight, from your kitchen
             </h2>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-            {dishes.map((dish, index) => (
-              <DishCard key={dish.title} dish={dish} index={index} />
-            ))}
-            <div className="col-span-2 sm:col-span-1">
-              <ChefBrainCompanionCard />
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-4 items-stretch">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              {dishes.map((dish, index) => (
+                <DishCard key={dish.title} dish={dish} index={index} />
+              ))}
             </div>
+            <ChefBrainCompanionCard />
           </div>
         </section>
       )}
