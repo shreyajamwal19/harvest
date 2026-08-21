@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types -- this project doesn't use PropTypes, see AuthContext.jsx */
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -11,17 +11,21 @@ import {
   Check,
   RefreshCw,
   ChefHat,
+  UtensilsCrossed,
+  Coffee,
+  Sun,
+  Moon,
+  ShoppingBasket,
 } from 'lucide-react'
-import { chefChat, getErrorMessage } from '../services/api'
-import Loading from '../components/Loading'
+import { chefChat, getPantryItems, getErrorMessage } from '../services/api'
 import { CATEGORY_META, CATEGORY_ORDER } from '../utils/pantryCategories'
 
 const DAY_OPTIONS = [1, 3, 5, 7]
 const MEAL_TYPE_OPTIONS = [
-  { value: null, label: 'Any meal' },
-  { value: 'breakfast', label: 'Breakfast' },
-  { value: 'lunch', label: 'Lunch' },
-  { value: 'dinner', label: 'Dinner' },
+  { value: null, label: 'Any meal', icon: UtensilsCrossed },
+  { value: 'breakfast', label: 'Breakfast', icon: Coffee },
+  { value: 'lunch', label: 'Lunch', icon: Sun },
+  { value: 'dinner', label: 'Dinner', icon: Moon },
 ]
 
 function buildMealPlanMessage(days, mealType) {
@@ -154,6 +158,25 @@ function DayCard({ day, index, expanded, onToggle }) {
   )
 }
 
+function DaySkeleton({ index }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3, delay: index * 0.06 }}
+      className="card !p-0 overflow-hidden"
+    >
+      <div className="flex items-center gap-3 px-4 sm:px-5 py-3.5">
+        <span className="flex-shrink-0 w-12 h-12 rounded-full bg-paper-200 animate-pulse" />
+        <div className="min-w-0 flex-1 space-y-2">
+          <span className="block h-2.5 w-16 rounded-full bg-paper-200 animate-pulse" />
+          <span className="block h-3.5 w-2/3 rounded-full bg-paper-200 animate-pulse" />
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
 function ShoppingListView({ categories, checked, onToggleItem }) {
   const totalItems = categories.reduce((sum, c) => sum + c.items.length, 0)
   const checkedCount = Object.values(checked).filter(Boolean).length
@@ -222,9 +245,11 @@ function ShoppingListView({ categories, checked, onToggleItem }) {
 }
 
 function MealPlan() {
+  const navigate = useNavigate()
   const [sessionId, setSessionId] = useState(null)
   const [days, setDays] = useState(3)
   const [mealType, setMealType] = useState(null)
+  const [pantryCount, setPantryCount] = useState(null)
 
   const [plan, setPlan] = useState(null)
   const [expandedDay, setExpandedDay] = useState(0)
@@ -235,6 +260,16 @@ function MealPlan() {
   const [checked, setChecked] = useState({})
   const [listLoading, setListLoading] = useState(false)
   const [listError, setListError] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    getPantryItems()
+      .then((res) => !cancelled && setPantryCount(res.data.length))
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const generatePlan = async () => {
     setPlanLoading(true)
@@ -254,6 +289,7 @@ function MealPlan() {
         setPlanError(data.message || "Couldn't put together a meal plan from what's available right now.")
       }
     } catch (err) {
+      setPlan(null)
       setPlanError(getErrorMessage(err, 'The Chef Brain had trouble planning that. Please try again.'))
     } finally {
       setPlanLoading(false)
@@ -293,7 +329,7 @@ function MealPlan() {
       </div>
 
       {/* Controls */}
-      <div className="card mb-6 space-y-4">
+      <div className="card mb-6 space-y-5">
         <div>
           <span className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-500 block mb-2">
             Days
@@ -303,7 +339,7 @@ function MealPlan() {
               <button
                 key={d}
                 onClick={() => setDays(d)}
-                className={`px-4 py-2 rounded-sheet text-sm font-medium transition-colors ${
+                className={`flex-1 sm:flex-none sm:w-14 py-2.5 rounded-sheet text-sm font-semibold transition-colors ${
                   days === d
                     ? 'bg-moss-400 text-white'
                     : 'bg-paper-100 text-ink-600 hover:bg-paper-200'
@@ -318,22 +354,28 @@ function MealPlan() {
           <span className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-500 block mb-2">
             Meal type
           </span>
-          <div className="flex flex-wrap gap-2">
-            {MEAL_TYPE_OPTIONS.map((opt) => (
-              <button
-                key={opt.label}
-                onClick={() => setMealType(opt.value)}
-                className={`px-4 py-2 rounded-sheet text-sm font-medium transition-colors ${
-                  mealType === opt.value
-                    ? 'bg-moss-400 text-white'
-                    : 'bg-paper-100 text-ink-600 hover:bg-paper-200'
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {MEAL_TYPE_OPTIONS.map((opt) => {
+              const Icon = opt.icon
+              const active = mealType === opt.value
+              return (
+                <button
+                  key={opt.label}
+                  onClick={() => setMealType(opt.value)}
+                  className={`flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-sheet text-sm font-medium transition-colors ${
+                    active
+                      ? 'bg-moss-400 text-white'
+                      : 'bg-paper-100 text-ink-600 hover:bg-paper-200'
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5 flex-shrink-0" strokeWidth={1.75} />
+                  {opt.label}
+                </button>
+              )
+            })}
           </div>
         </div>
+
         <button
           onClick={generatePlan}
           disabled={planLoading}
@@ -351,18 +393,52 @@ function MealPlan() {
             </>
           )}
         </button>
+
+        {pantryCount !== null && (
+          <p className="flex items-center justify-center gap-1.5 text-xs text-ink-400">
+            <ShoppingBasket className="w-3.5 h-3.5" strokeWidth={1.75} />
+            {pantryCount > 0
+              ? `Using ${pantryCount} pantry item${pantryCount === 1 ? '' : 's'} to guide this plan`
+              : 'Your pantry is empty - add a few items for a more tailored plan'}
+          </p>
+        )}
       </div>
 
       {planError && (
-        <div className="flex items-center gap-2 text-sm text-brick-400 bg-brick-50 border border-brick-100 rounded-sheet px-4 py-2.5 mb-6">
+        <div className="flex items-center gap-3 text-sm text-brick-400 bg-brick-50 border border-brick-100 rounded-sheet px-4 py-3 mb-6">
           <AlertCircle className="w-4 h-4 flex-shrink-0" strokeWidth={1.75} />
-          {planError}
+          <span className="flex-1">{planError}</span>
+          <button
+            onClick={generatePlan}
+            className="flex-shrink-0 font-semibold text-brick-500 hover:text-brick-600 transition-colors"
+          >
+            Try again
+          </button>
         </div>
       )}
 
-      {planLoading && !plan && <Loading />}
+      {planLoading && (
+        <div className="space-y-3 mb-6">
+          {Array.from({ length: Math.min(days, 4) }).map((_, i) => (
+            <DaySkeleton key={i} index={i} />
+          ))}
+        </div>
+      )}
 
-      {plan && plan.length > 0 && (
+      {!planLoading && !plan && !planError && (
+        <div className="card text-center py-12">
+          <div className="w-12 h-12 bg-paper-200 rounded-sheet flex items-center justify-center mx-auto mb-4">
+            <CalendarDays className="w-6 h-6 text-moss-400" strokeWidth={1.75} />
+          </div>
+          <p className="text-ink-700 font-medium mb-1">No plan yet</p>
+          <p className="text-sm text-ink-500 max-w-sm mx-auto">
+            Pick how many days and what kind of meal above, then generate - Chef Brain will
+            build it from your pantry and preferences.
+          </p>
+        </div>
+      )}
+
+      {!planLoading && plan && plan.length > 0 && (
         <>
           <div className="space-y-3 mb-6">
             {plan.map((day, index) => (
@@ -397,9 +473,15 @@ function MealPlan() {
           )}
 
           {listError && (
-            <div className="flex items-center gap-2 text-sm text-brick-400 bg-brick-50 border border-brick-100 rounded-sheet px-4 py-2.5 mb-6">
+            <div className="flex items-center gap-3 text-sm text-brick-400 bg-brick-50 border border-brick-100 rounded-sheet px-4 py-3 mb-6">
               <AlertCircle className="w-4 h-4 flex-shrink-0" strokeWidth={1.75} />
-              {listError}
+              <span className="flex-1">{listError}</span>
+              <button
+                onClick={generateShoppingList}
+                className="flex-shrink-0 font-semibold text-brick-500 hover:text-brick-600 transition-colors"
+              >
+                Try again
+              </button>
             </div>
           )}
 
@@ -411,6 +493,24 @@ function MealPlan() {
             />
           )}
         </>
+      )}
+
+      {!planLoading && plan && plan.length === 0 && !planError && (
+        <div className="card text-center py-12">
+          <div className="w-12 h-12 bg-brick-50 rounded-sheet flex items-center justify-center mx-auto mb-4">
+            <ChefHat className="w-6 h-6 text-brick-400" strokeWidth={1.75} />
+          </div>
+          <p className="text-ink-700 font-medium mb-1">Nothing to plan with yet</p>
+          <p className="text-sm text-ink-500 max-w-sm mx-auto mb-4">
+            Add a few ingredients to your pantry, or try a different meal type.
+          </p>
+          <button
+            onClick={() => navigate('/pantry')}
+            className="text-sm font-semibold text-brick-500 hover:text-brick-600 transition-colors"
+          >
+            Go to Pantry
+          </button>
+        </div>
       )}
     </div>
   )
