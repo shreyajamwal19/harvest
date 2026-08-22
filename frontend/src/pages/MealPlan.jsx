@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types -- this project doesn't use PropTypes, see AuthContext.jsx */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -260,6 +260,7 @@ function MealPlan() {
   const [checked, setChecked] = useState({})
   const [listLoading, setListLoading] = useState(false)
   const [listError, setListError] = useState('')
+  const resultsRef = useRef(null)
 
   useEffect(() => {
     let cancelled = false
@@ -270,6 +271,12 @@ function MealPlan() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (planLoading) {
+      resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [planLoading])
 
   const generatePlan = async () => {
     setPlanLoading(true)
@@ -336,8 +343,9 @@ function MealPlan() {
           </span>
           <div className="flex gap-2">
             {DAY_OPTIONS.map((d) => (
-              <button
+              <motion.button
                 key={d}
+                whileTap={{ scale: 0.94 }}
                 onClick={() => setDays(d)}
                 className={`flex-1 sm:flex-none sm:w-14 py-2.5 rounded-sheet text-sm font-semibold transition-colors ${
                   days === d
@@ -346,7 +354,7 @@ function MealPlan() {
                 }`}
               >
                 {d}
-              </button>
+              </motion.button>
             ))}
           </div>
         </div>
@@ -359,8 +367,9 @@ function MealPlan() {
               const Icon = opt.icon
               const active = mealType === opt.value
               return (
-                <button
+                <motion.button
                   key={opt.label}
+                  whileTap={{ scale: 0.96 }}
                   onClick={() => setMealType(opt.value)}
                   className={`flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-sheet text-sm font-medium transition-colors ${
                     active
@@ -370,13 +379,14 @@ function MealPlan() {
                 >
                   <Icon className="w-3.5 h-3.5 flex-shrink-0" strokeWidth={1.75} />
                   {opt.label}
-                </button>
+                </motion.button>
               )
             })}
           </div>
         </div>
 
-        <button
+        <motion.button
+          whileTap={{ scale: 0.98 }}
           onClick={generatePlan}
           disabled={planLoading}
           className="btn-primary w-full flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
@@ -392,7 +402,7 @@ function MealPlan() {
               {plan ? 'Regenerate plan' : 'Generate meal plan'}
             </>
           )}
-        </button>
+        </motion.button>
 
         {pantryCount !== null && (
           <p className="flex items-center justify-center gap-1.5 text-xs text-ink-400">
@@ -404,9 +414,10 @@ function MealPlan() {
         )}
       </div>
 
-      {planError && (
-        <div className="flex items-center gap-3 text-sm text-brick-400 bg-brick-50 border border-brick-100 rounded-sheet px-4 py-3 mb-6">
-          <AlertCircle className="w-4 h-4 flex-shrink-0" strokeWidth={1.75} />
+      <div ref={resultsRef} className="scroll-mt-24">
+        {planError && (
+          <div className="flex items-center gap-3 text-sm text-brick-400 bg-brick-50 border border-brick-100 rounded-sheet px-4 py-3 mb-6">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" strokeWidth={1.75} />
           <span className="flex-1">{planError}</span>
           <button
             onClick={generatePlan}
@@ -512,6 +523,7 @@ function MealPlan() {
           </button>
         </div>
       )}
+      </div>
     </div>
   )
 }
