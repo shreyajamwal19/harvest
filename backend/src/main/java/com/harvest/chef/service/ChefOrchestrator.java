@@ -38,8 +38,18 @@ public class ChefOrchestrator {
         // 3. Response Rendering
         ChatResponse response = responseRenderingService.render(context.getSessionId(), chefResponse);
 
-        // 4. Memory Write
-        memoryWriteService.record(context.getSessionId(), message, chefResponse);
+        // 4. Memory Write - guarded here, not just inside MemoryWriteService itself: once
+        // Hibernate flags a @Transactional method's transaction rollback-only from a flush-time
+        // SQL error, Spring throws UnexpectedRollbackException at commit, which happens *after*
+        // the method body (and its own try/catch) has already returned - so a persistence
+        // failure in there can otherwise destroy an already-computed, perfectly good response.
+        try {
+            memoryWriteService.record(context.getSessionId(), message, chefResponse);
+        } catch (Exception e) {
+            log.warn("Memory write failed for session {} - the response below is still returned; "
+                    + "only this turn's history may be missing next time: {}",
+                    context.getSessionId(), e.getMessage());
+        }
 
         return response;
     }
