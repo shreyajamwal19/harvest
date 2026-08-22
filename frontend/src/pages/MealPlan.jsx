@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types -- this project doesn't use PropTypes, see AuthContext.jsx */
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -16,9 +16,22 @@ import {
   Sun,
   Moon,
   ShoppingBasket,
+  Shuffle,
+  Bookmark,
+  BookmarkX,
+  Loader2,
 } from 'lucide-react'
-import { chefChat, getPantryItems, getErrorMessage } from '../services/api'
+import {
+  chefChat,
+  getPantryItems,
+  getSavedRecipes,
+  saveRecipe,
+  unsaveRecipe,
+  regenerateMealPlanDay,
+  getErrorMessage,
+} from '../services/api'
 import { CATEGORY_META, CATEGORY_ORDER } from '../utils/pantryCategories'
+import Toast from '../components/Toast'
 
 const DAY_OPTIONS = [1, 3, 5, 7]
 const MEAL_TYPE_OPTIONS = [
@@ -33,7 +46,59 @@ function buildMealPlanMessage(days, mealType) {
   return `Give me a ${days}-day ${mealPart}meal plan`.replace(/\s+/g, ' ').trim()
 }
 
-function DayCard({ day, index, expanded, onToggle }) {
+/** Horizontal week strip - a thumbnail per day, active one highlighted, tap to jump to it. */
+function WeekStrip({ days, activeIndex, onSelect }) {
+  if (days.length <= 1) return null
+  return (
+    <div className="flex gap-3 overflow-x-auto pb-2 mb-5 -mx-1 px-1">
+      {days.map((day, index) => {
+        const recipe = day.recipe
+        const active = index === activeIndex
+        return (
+          <button
+            key={index}
+            onClick={() => onSelect(index)}
+            className="flex-shrink-0 flex flex-col items-center gap-1.5 w-14 group"
+          >
+            <span
+              className={`relative w-12 h-12 rounded-full overflow-hidden border-2 transition-colors ${
+                active ? 'border-brick-500' : 'border-transparent group-hover:border-ink-700/15'
+              }`}
+            >
+              {recipe?.imageUrl ? (
+                <img src={recipe.imageUrl} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <span className="w-full h-full flex items-center justify-center bg-paper-200">
+                  <ChefHat className="w-4 h-4 text-moss-400" strokeWidth={1.75} />
+                </span>
+              )}
+            </span>
+            <span
+              className={`text-[10px] font-semibold uppercase tracking-wide ${
+                active ? 'text-brick-500' : 'text-ink-400'
+              }`}
+            >
+              {day.dayLabel?.replace('Day ', 'D') || `D${index + 1}`}
+            </span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function DayCard({
+  day,
+  index,
+  expanded,
+  onToggle,
+  innerRef,
+  onSwap,
+  swapping,
+  saved,
+  savePending,
+  onToggleSave,
+}) {
   const recipe = day.recipe
   const navigate = useNavigate()
   const [imageFailed, setImageFailed] = useState(false)
@@ -41,45 +106,52 @@ function DayCard({ day, index, expanded, onToggle }) {
 
   return (
     <motion.div
+      ref={innerRef}
       layout
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, delay: index * 0.04 }}
-      className="card !p-0 overflow-hidden"
+      className="card !p-0 overflow-hidden scroll-mt-24"
     >
-      <button
-        onClick={onToggle}
-        className="w-full flex items-center gap-3 px-4 sm:px-5 py-3.5 text-left"
-      >
-        {hasImage ? (
-          <img
-            src={recipe.imageUrl}
-            alt=""
-            onError={() => setImageFailed(true)}
-            loading="lazy"
-            className="flex-shrink-0 w-12 h-12 rounded-full object-cover border border-ink-700/10"
+      <div className="flex items-center gap-1">
+        <button
+          onClick={onToggle}
+          className="flex-1 min-w-0 flex items-center gap-3 px-4 sm:px-5 py-3.5 text-left"
+        >
+          {swapping ? (
+            <span className="flex-shrink-0 w-12 h-12 rounded-full bg-paper-200 flex items-center justify-center">
+              <Loader2 className="w-4 h-4 text-brick-400 animate-spin" strokeWidth={1.75} />
+            </span>
+          ) : hasImage ? (
+            <img
+              src={recipe.imageUrl}
+              alt=""
+              onError={() => setImageFailed(true)}
+              loading="lazy"
+              className="flex-shrink-0 w-12 h-12 rounded-full object-cover border border-ink-700/10"
+            />
+          ) : (
+            <span className="flex-shrink-0 w-12 h-12 rounded-full bg-paper-200 flex items-center justify-center">
+              <ChefHat className="w-5 h-5 text-moss-400" strokeWidth={1.75} />
+            </span>
+          )}
+          <span className="min-w-0 flex-1">
+            <span className="block text-xs font-semibold uppercase tracking-[0.14em] text-moss-400">
+              {day.dayLabel}
+            </span>
+            <span className="block font-display text-lg font-semibold text-ink-800 truncate">
+              {swapping ? 'Finding something else\u2026' : recipe?.title || 'Untitled dish'}
+            </span>
+          </span>
+          <ChevronDown
+            className={`flex-shrink-0 w-4 h-4 text-ink-400 transition-transform ${expanded ? 'rotate-180' : ''}`}
+            strokeWidth={1.75}
           />
-        ) : (
-          <span className="flex-shrink-0 w-12 h-12 rounded-full bg-paper-200 flex items-center justify-center">
-            <ChefHat className="w-5 h-5 text-moss-400" strokeWidth={1.75} />
-          </span>
-        )}
-        <div className="min-w-0 flex-1">
-          <span className="text-xs font-semibold uppercase tracking-[0.14em] text-moss-400">
-            {day.dayLabel}
-          </span>
-          <p className="font-display text-lg font-semibold text-ink-800 truncate">
-            {recipe?.title || 'Untitled dish'}
-          </p>
-        </div>
-        <ChevronDown
-          className={`w-4 h-4 flex-shrink-0 text-ink-400 transition-transform ${expanded ? 'rotate-180' : ''}`}
-          strokeWidth={1.75}
-        />
-      </button>
+        </button>
+      </div>
 
       <AnimatePresence initial={false}>
-        {expanded && recipe && (
+        {expanded && recipe && !swapping && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
@@ -140,16 +212,45 @@ function DayCard({ day, index, expanded, onToggle }) {
                   </ol>
                 </div>
               )}
-              {recipe.steps?.length > 0 && (
+
+              <div className="flex items-center gap-2 pt-1">
+                {recipe.steps?.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => navigate('/cook', { state: { recipe } })}
+                    className="flex-1 flex items-center justify-center gap-2 text-sm font-semibold text-paper-50 bg-ink-800 hover:bg-ink-700 rounded-sheet py-3 transition-colors"
+                  >
+                    <ChefHat className="w-4 h-4" strokeWidth={1.75} />
+                    Start Cooking
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={() => navigate('/cook', { state: { recipe } })}
-                  className="w-full flex items-center justify-center gap-2 text-sm font-semibold text-paper-50 bg-ink-800 hover:bg-ink-700 rounded-sheet py-3 transition-colors"
+                  onClick={onToggleSave}
+                  disabled={savePending}
+                  aria-pressed={saved}
+                  aria-label={saved ? 'Remove from saved recipes' : 'Save this recipe'}
+                  className={`flex-shrink-0 w-11 h-11 rounded-sheet flex items-center justify-center border transition-colors disabled:opacity-50 ${
+                    saved
+                      ? 'bg-brick-500 border-brick-500 text-paper-50'
+                      : 'bg-paper-50 border-ink-700/15 text-ink-500 hover:text-brick-500 hover:border-brick-300'
+                  }`}
                 >
-                  <ChefHat className="w-4 h-4" strokeWidth={1.75} />
-                  Start Cooking
+                  {savePending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" strokeWidth={2} />
+                  ) : (
+                    <Bookmark className="w-4 h-4" strokeWidth={2} fill={saved ? 'currentColor' : 'none'} />
+                  )}
                 </button>
-              )}
+                <button
+                  type="button"
+                  onClick={onSwap}
+                  aria-label="Swap this day for a different recipe"
+                  className="flex-shrink-0 w-11 h-11 rounded-sheet flex items-center justify-center border border-ink-700/15 bg-paper-50 text-ink-500 hover:text-moss-500 hover:border-moss-300 transition-colors"
+                >
+                  <Shuffle className="w-4 h-4" strokeWidth={1.75} />
+                </button>
+              </div>
             </div>
           </motion.div>
         )}
@@ -255,17 +356,37 @@ function MealPlan() {
   const [expandedDay, setExpandedDay] = useState(0)
   const [planLoading, setPlanLoading] = useState(false)
   const [planError, setPlanError] = useState('')
+  const [swappingIndex, setSwappingIndex] = useState(-1)
 
   const [shoppingList, setShoppingList] = useState(null)
   const [checked, setChecked] = useState({})
   const [listLoading, setListLoading] = useState(false)
   const [listError, setListError] = useState('')
   const resultsRef = useRef(null)
+  const dayRefs = useRef({})
+
+  const [savedByTitle, setSavedByTitle] = useState(new Map())
+  const [pendingTitles, setPendingTitles] = useState(new Set())
+  const [toast, setToast] = useState(null)
+  const toastTimerRef = useRef(null)
+
+  const showToast = useCallback((data) => {
+    clearTimeout(toastTimerRef.current)
+    setToast({ id: Date.now(), ...data })
+    toastTimerRef.current = setTimeout(() => setToast(null), 3200)
+  }, [])
+  useEffect(() => () => clearTimeout(toastTimerRef.current), [])
 
   useEffect(() => {
     let cancelled = false
     getPantryItems()
       .then((res) => !cancelled && setPantryCount(res.data.length))
+      .catch(() => {})
+    getSavedRecipes()
+      .then((res) => {
+        if (cancelled) return
+        setSavedByTitle(new Map(res.data.map((s) => [s.recipe.title?.trim().toLowerCase(), s.id])))
+      })
       .catch(() => {})
     return () => {
       cancelled = true
@@ -321,6 +442,75 @@ function MealPlan() {
     } finally {
       setListLoading(false)
     }
+  }
+
+  const handleSwapDay = async (index) => {
+    if (!plan || swappingIndex !== -1) return
+    setSwappingIndex(index)
+    try {
+      const excludeTitles = plan.map((d) => d.recipe?.title).filter(Boolean)
+      const response = await regenerateMealPlanDay({ excludeTitles, mealType })
+      setPlan((prev) => prev.map((d, i) => (i === index ? { ...d, recipe: response.data.recipe } : d)))
+    } catch (err) {
+      showToast({
+        tone: 'neutral',
+        icon: <Shuffle className="w-4 h-4 text-paper-50" strokeWidth={2} />,
+        title: getErrorMessage(err, "Couldn't find a different recipe right now"),
+      })
+    } finally {
+      setSwappingIndex(-1)
+    }
+  }
+
+  const handleToggleSave = async (recipe) => {
+    const key = recipe?.title?.trim().toLowerCase()
+    if (!key || pendingTitles.has(key)) return
+    setPendingTitles((prev) => new Set(prev).add(key))
+    try {
+      const existingId = savedByTitle.get(key)
+      if (existingId) {
+        await unsaveRecipe(existingId)
+        setSavedByTitle((prev) => {
+          const next = new Map(prev)
+          next.delete(key)
+          return next
+        })
+        showToast({
+          tone: 'neutral',
+          icon: <BookmarkX className="w-4 h-4 text-paper-50" strokeWidth={2} />,
+          title: 'Removed from saved recipes',
+          subtitle: recipe.title,
+        })
+      } else {
+        const response = await saveRecipe(recipe)
+        setSavedByTitle((prev) => new Map(prev).set(key, response.data.id))
+        showToast({
+          tone: 'success',
+          icon: <Bookmark className="w-4 h-4 text-paper-50" strokeWidth={2} fill="currentColor" />,
+          title: 'Saved to your collection',
+          subtitle: recipe.title,
+        })
+      }
+    } catch (err) {
+      showToast({
+        tone: 'neutral',
+        icon: <BookmarkX className="w-4 h-4 text-paper-50" strokeWidth={2} />,
+        title: getErrorMessage(err, "Couldn't update saved recipes"),
+      })
+    } finally {
+      setPendingTitles((prev) => {
+        const next = new Set(prev)
+        next.delete(key)
+        return next
+      })
+    }
+  }
+
+  const jumpToDay = (index) => {
+    setExpandedDay(index)
+    requestAnimationFrame(() => {
+      dayRefs.current[index]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
   }
 
   return (
@@ -418,112 +608,127 @@ function MealPlan() {
         {planError && (
           <div className="flex items-center gap-3 text-sm text-brick-400 bg-brick-50 border border-brick-100 rounded-sheet px-4 py-3 mb-6">
             <AlertCircle className="w-4 h-4 flex-shrink-0" strokeWidth={1.75} />
-          <span className="flex-1">{planError}</span>
-          <button
-            onClick={generatePlan}
-            className="flex-shrink-0 font-semibold text-brick-500 hover:text-brick-600 transition-colors"
-          >
-            Try again
-          </button>
-        </div>
-      )}
-
-      {planLoading && (
-        <div className="space-y-3 mb-6">
-          {Array.from({ length: Math.min(days, 4) }).map((_, i) => (
-            <DaySkeleton key={i} index={i} />
-          ))}
-        </div>
-      )}
-
-      {!planLoading && !plan && !planError && (
-        <div className="card text-center py-12">
-          <div className="w-12 h-12 bg-paper-200 rounded-sheet flex items-center justify-center mx-auto mb-4">
-            <CalendarDays className="w-6 h-6 text-moss-400" strokeWidth={1.75} />
+            <span className="flex-1">{planError}</span>
+            <button
+              onClick={generatePlan}
+              className="flex-shrink-0 font-semibold text-brick-500 hover:text-brick-600 transition-colors"
+            >
+              Try again
+            </button>
           </div>
-          <p className="text-ink-700 font-medium mb-1">No plan yet</p>
-          <p className="text-sm text-ink-500 max-w-sm mx-auto">
-            Pick how many days and what kind of meal above, then generate - Chef Brain will
-            build it from your pantry and preferences.
-          </p>
-        </div>
-      )}
+        )}
 
-      {!planLoading && plan && plan.length > 0 && (
-        <>
+        {planLoading && (
           <div className="space-y-3 mb-6">
-            {plan.map((day, index) => (
-              <DayCard
-                key={index}
-                day={day}
-                index={index}
-                expanded={expandedDay === index}
-                onToggle={() => setExpandedDay(expandedDay === index ? -1 : index)}
-              />
+            {Array.from({ length: Math.min(days, 4) }).map((_, i) => (
+              <DaySkeleton key={i} index={i} />
             ))}
           </div>
+        )}
 
-          {!shoppingList && (
-            <button
-              onClick={generateShoppingList}
-              disabled={listLoading}
-              className="btn-secondary w-full flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed mb-6"
-            >
-              {listLoading ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" strokeWidth={1.75} />
-                  Building your list...
-                </>
-              ) : (
-                <>
-                  <ShoppingCart className="w-4 h-4" strokeWidth={1.75} />
-                  Generate grocery list from this plan
-                </>
-              )}
-            </button>
-          )}
+        {!planLoading && !plan && !planError && (
+          <div className="card text-center py-12">
+            <div className="w-12 h-12 bg-paper-200 rounded-sheet flex items-center justify-center mx-auto mb-4">
+              <CalendarDays className="w-6 h-6 text-moss-400" strokeWidth={1.75} />
+            </div>
+            <p className="text-ink-700 font-medium mb-1">No plan yet</p>
+            <p className="text-sm text-ink-500 max-w-sm mx-auto">
+              Pick how many days and what kind of meal above, then generate - Chef Brain will
+              build it from your pantry and preferences.
+            </p>
+          </div>
+        )}
 
-          {listError && (
-            <div className="flex items-center gap-3 text-sm text-brick-400 bg-brick-50 border border-brick-100 rounded-sheet px-4 py-3 mb-6">
-              <AlertCircle className="w-4 h-4 flex-shrink-0" strokeWidth={1.75} />
-              <span className="flex-1">{listError}</span>
+        {!planLoading && plan && plan.length > 0 && (
+          <>
+            <WeekStrip days={plan} activeIndex={expandedDay} onSelect={jumpToDay} />
+
+            <div className="space-y-3 mb-6">
+              {plan.map((day, index) => {
+                const key = day.recipe?.title?.trim().toLowerCase()
+                return (
+                  <DayCard
+                    key={index}
+                    day={day}
+                    index={index}
+                    expanded={expandedDay === index}
+                    onToggle={() => setExpandedDay(expandedDay === index ? -1 : index)}
+                    innerRef={(el) => {
+                      dayRefs.current[index] = el
+                    }}
+                    onSwap={() => handleSwapDay(index)}
+                    swapping={swappingIndex === index}
+                    saved={savedByTitle.has(key)}
+                    savePending={pendingTitles.has(key)}
+                    onToggleSave={() => handleToggleSave(day.recipe)}
+                  />
+                )
+              })}
+            </div>
+
+            {!shoppingList && (
               <button
                 onClick={generateShoppingList}
-                className="flex-shrink-0 font-semibold text-brick-500 hover:text-brick-600 transition-colors"
+                disabled={listLoading}
+                className="btn-secondary w-full flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed mb-6"
               >
-                Try again
+                {listLoading ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" strokeWidth={1.75} />
+                    Building your list...
+                  </>
+                ) : (
+                  <>
+                    <ShoppingCart className="w-4 h-4" strokeWidth={1.75} />
+                    Generate grocery list from this plan
+                  </>
+                )}
               </button>
+            )}
+
+            {listError && (
+              <div className="flex items-center gap-3 text-sm text-brick-400 bg-brick-50 border border-brick-100 rounded-sheet px-4 py-3 mb-6">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" strokeWidth={1.75} />
+                <span className="flex-1">{listError}</span>
+                <button
+                  onClick={generateShoppingList}
+                  className="flex-shrink-0 font-semibold text-brick-500 hover:text-brick-600 transition-colors"
+                >
+                  Try again
+                </button>
+              </div>
+            )}
+
+            {shoppingList && (
+              <ShoppingListView
+                categories={shoppingList}
+                checked={checked}
+                onToggleItem={(key) => setChecked((prev) => ({ ...prev, [key]: !prev[key] }))}
+              />
+            )}
+          </>
+        )}
+
+        {!planLoading && plan && plan.length === 0 && !planError && (
+          <div className="card text-center py-12">
+            <div className="w-12 h-12 bg-brick-50 rounded-sheet flex items-center justify-center mx-auto mb-4">
+              <ChefHat className="w-6 h-6 text-brick-400" strokeWidth={1.75} />
             </div>
-          )}
-
-          {shoppingList && (
-            <ShoppingListView
-              categories={shoppingList}
-              checked={checked}
-              onToggleItem={(key) => setChecked((prev) => ({ ...prev, [key]: !prev[key] }))}
-            />
-          )}
-        </>
-      )}
-
-      {!planLoading && plan && plan.length === 0 && !planError && (
-        <div className="card text-center py-12">
-          <div className="w-12 h-12 bg-brick-50 rounded-sheet flex items-center justify-center mx-auto mb-4">
-            <ChefHat className="w-6 h-6 text-brick-400" strokeWidth={1.75} />
+            <p className="text-ink-700 font-medium mb-1">Nothing to plan with yet</p>
+            <p className="text-sm text-ink-500 max-w-sm mx-auto mb-4">
+              Add a few ingredients to your pantry, or try a different meal type.
+            </p>
+            <button
+              onClick={() => navigate('/pantry')}
+              className="text-sm font-semibold text-brick-500 hover:text-brick-600 transition-colors"
+            >
+              Go to Pantry
+            </button>
           </div>
-          <p className="text-ink-700 font-medium mb-1">Nothing to plan with yet</p>
-          <p className="text-sm text-ink-500 max-w-sm mx-auto mb-4">
-            Add a few ingredients to your pantry, or try a different meal type.
-          </p>
-          <button
-            onClick={() => navigate('/pantry')}
-            className="text-sm font-semibold text-brick-500 hover:text-brick-600 transition-colors"
-          >
-            Go to Pantry
-          </button>
-        </div>
-      )}
+        )}
       </div>
+
+      <Toast toast={toast} onDismiss={() => setToast(null)} />
     </div>
   )
 }

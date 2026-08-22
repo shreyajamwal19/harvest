@@ -116,4 +116,13 @@ export function getShowcaseRecipe(query) {
   return api.get('/public/showcase', { params: query ? { query } : {} })
 }
 
+/**
+ * Deterministic single-day swap for the Meal Plan page - no chat/LLM round trip, since picking
+ * a replacement day is exactly the structured, deterministic work MealPlanningService already
+ * does. `excludeTitles` should be every title currently in the plan.
+ */
+export function regenerateMealPlanDay({ excludeTitles, mealType }) {
+  return api.post('/meal-plan/regenerate-day', { excludeTitles, mealType })
+}
+
 export default api

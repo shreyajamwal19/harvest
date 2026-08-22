@@ -72,6 +72,54 @@ public class MealPlanningService {
     }
 
     /**
+     * Swaps a single day: same deterministic scoring pass as {@link #generate}, but the caller
+     * supplies every title already in the plan (every other day, not just neighbours) so the
+     * replacement can never repeat one - lets the Meal Plan page offer a "Swap this day" action
+     * per day instead of forcing a full regenerate. Returns null (never throws) if genuinely
+     * nothing distinct is left in the pool - the caller treats that as "no alternative right now".
+     */
+    public MealPlanDay regenerateDay(ConversationContext context, List<String> excludeTitles, Category mealTypeHint) {
+        PantrySnapshot pantry = context.getPantry();
+
+        String query = buildBrowseQuery(pantry);
+        List<RecipeCandidate> pool = knowledgeProviderManager.retrieveRecipes(query, false);
+
+        RetrievalPlan planForScoring = RetrievalPlan.builder()
+                .mentionedIngredients(pantry.isEmpty() ? List.of() : pantry.ingredientNames())
+                .preferenceTags(Set.of())
+                .build();
+
+        List<RecipeScore> scored = pool.stream()
+                .filter(c -> c.getTitle() != null && !c.getTitle().isBlank())
+                .map(c -> scoringEngine.score(c, planForScoring, context.getUserProfile(), pantry))
+                .sorted(Comparator.comparingDouble(RecipeScore::total).reversed())
+                .toList();
+
+        Set<String> usedTitles = new LinkedHashSet<>();
+        if (excludeTitles != null) {
+            excludeTitles.stream()
+                    .filter(t -> t != null && !t.isBlank())
+                    .forEach(t -> usedTitles.add(t.trim().toLowerCase(Locale.ROOT)));
+        }
+
+        List<MealPlanDay> onePick = new ArrayList<>();
+        fillPlan(onePick, usedTitles, scored, 1, mealTypeHint, true, Optional.empty());
+        if (onePick.isEmpty()) {
+            // Relaxed pass mirrors generate()'s pass 2 - only if the strict pass (meal-type
+            // hint honoured, non-meal categories excluded) couldn't find anything distinct left.
+            fillPlan(onePick, usedTitles, scored, 1, null, false, Optional.empty());
+        }
+        if (onePick.isEmpty()) {
+            return null;
+        }
+
+        MealPlanDay day = onePick.get(0);
+        cookingHistoryService.recordShown(context.getUserId(), List.of(day.getRecipe()));
+        log.info("[meal-plan] regenerated single day userId={}", context.getUserId());
+        return day;
+    }
+
+    /**
      * Greedy variety-aware selection: walks the score-sorted pool once, skipping recipes whose
      * primary category repeats the immediately preceding day (MEAL_VARIETY: no four days of
      * chicken-anything in a row) and skipping non-meal categories (sauces/dips/desserts) unless
