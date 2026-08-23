@@ -8,7 +8,6 @@ import com.harvest.chef.knowledge.provider.CookingKnowledgeProvider;
 import com.harvest.chef.knowledge.provider.IngredientIntelligenceProvider;
 import com.harvest.chef.knowledge.provider.KnowledgeProvider;
 import com.harvest.chef.knowledge.provider.NutritionKnowledgeProvider;
-import com.harvest.chef.knowledge.provider.PantryKnowledgeProvider;
 import com.harvest.chef.knowledge.provider.RecipeKnowledgeProvider;
 import com.harvest.chef.knowledge.provider.UserMemoryKnowledgeProvider;
 import lombok.RequiredArgsConstructor;
@@ -119,26 +118,6 @@ public class KnowledgeProviderManager {
 
         logObservability("cooking-knowledge", results, best == null ? 0 : 1);
         return best;
-    }
-
-    // ---------------------------------------------------------------- pantry
-
-    public List<String> retrievePantry(List<String> mentionedIngredients) {
-        List<ProviderResult<List<String>>> results =
-                executeAll(registry.getPantryProviders(), p -> p.retrieve(mentionedIngredients));
-
-        List<String> merged = new ArrayList<>();
-        for (ProviderResult<List<String>> result : results) {
-            if (result.isSuccess() && result.getData() != null) {
-                for (String item : result.getData()) {
-                    if (!merged.contains(item)) {
-                        merged.add(item);
-                    }
-                }
-            }
-        }
-        logObservability("pantry", results, merged.size());
-        return merged;
     }
 
     // ---------------------------------------------------------------- user memory

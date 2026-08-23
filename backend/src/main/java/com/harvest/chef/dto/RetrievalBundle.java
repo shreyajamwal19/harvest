@@ -11,7 +11,6 @@ import java.util.List;
 @Builder
 public class RetrievalBundle {
     private List<RecipeCandidate> recipeCandidates;
-    private List<String> pantryItems;
     private List<String> userMemoryNotes;
     private List<NutritionInfo> nutritionInfo;
     private List<IngredientProfile> ingredientProfiles;

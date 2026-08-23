@@ -37,12 +37,10 @@ public class RetrievalOrchestrator {
         List<RecipeCandidate> recipeCandidates =
                 knowledgeProviderManager.retrieveRecipes(query, plan.isNeedsExternalRecipes());
 
-        List<String> pantryItems = knowledgeProviderManager.retrievePantry(plan.getMentionedIngredients());
-
         List<String> userMemoryNotes =
                 knowledgeProviderManager.retrieveUserMemory(context.getUserId(), context.getSessionId());
 
-        List<String> nutritionTargets = pantryItems.isEmpty() ? plan.getMentionedIngredients() : pantryItems;
+        List<String> nutritionTargets = plan.getMentionedIngredients() == null ? List.of() : plan.getMentionedIngredients();
         List<NutritionInfo> nutritionInfo = plan.isNeedsNutritionGrounding()
                 ? knowledgeProviderManager.retrieveNutrition(nutritionTargets)
                 : List.of();
@@ -53,7 +51,6 @@ public class RetrievalOrchestrator {
 
         return RetrievalBundle.builder()
                 .recipeCandidates(recipeCandidates)
-                .pantryItems(pantryItems)
                 .userMemoryNotes(userMemoryNotes)
                 .nutritionInfo(nutritionInfo)
                 .ingredientProfiles(ingredientProfiles)

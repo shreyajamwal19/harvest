@@ -6,7 +6,6 @@ import com.harvest.chef.knowledge.provider.CookingKnowledgeProvider;
 import com.harvest.chef.knowledge.provider.IngredientIntelligenceProvider;
 import com.harvest.chef.knowledge.provider.KnowledgeProvider;
 import com.harvest.chef.knowledge.provider.NutritionKnowledgeProvider;
-import com.harvest.chef.knowledge.provider.PantryKnowledgeProvider;
 import com.harvest.chef.knowledge.provider.RecipeKnowledgeProvider;
 import com.harvest.chef.knowledge.provider.UserMemoryKnowledgeProvider;
 import lombok.Getter;
@@ -36,15 +35,13 @@ public class KnowledgeProviderRegistry {
     @Getter
     private final List<CookingKnowledgeProvider> cookingKnowledgeProviders;
     @Getter
-    private final List<PantryKnowledgeProvider> pantryProviders;
-    @Getter
     private final List<UserMemoryKnowledgeProvider> userMemoryProviders;
 
     /** Every registered provider across every category, for logging/health reporting. */
     public List<KnowledgeProvider> allProviders() {
         return java.util.stream.Stream.of(
                         recipeProviders, nutritionProviders, ingredientIntelligenceProviders,
-                        cookingKnowledgeProviders, pantryProviders, userMemoryProviders)
+                        cookingKnowledgeProviders, userMemoryProviders)
                 .flatMap(List::stream)
                 .map(KnowledgeProvider.class::cast)
                 .toList();
