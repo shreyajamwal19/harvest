@@ -484,6 +484,12 @@ public class RecipeScoringEngine {
                         contributions.add(pref.getConfidence() * alignment);
                     }
                 }
+                case PREFERRED_COOKING_DURATION -> {
+                    Double alignment = durationAlignment(pref.getValue(), candidate.getSteps());
+                    if (alignment != null) {
+                        contributions.add(pref.getConfidence() * alignment);
+                    }
+                }
                 case PREFERRED_SERVING_SIZE -> {
                     // RecipeCandidate.servings is real, provider-supplied data (never
                     // guessed), so unlike COOKING_SKILL/DURATION/APPLIANCE this preference
@@ -494,9 +500,10 @@ public class RecipeScoringEngine {
                     }
                 }
                 default -> {
-                    // COOKING_SKILL / PREFERRED_COOKING_DURATION / FAVORITE_APPLIANCE aren't
-                    // derivable from candidate text alone with what RecipeCandidate carries
-                    // today - left for a future refinement rather than guessed at.
+                    // COOKING_SKILL / FAVORITE_APPLIANCE: PreferenceLearningService has no
+                    // detection pattern for either yet, so no UserPreference row of these
+                    // categories is ever actually stored - nothing to align against without
+                    // guessing. Wire these up once a detection pattern for them exists.
                 }
             }
         }
@@ -611,6 +618,42 @@ public class RecipeScoringEngine {
     }
 
     /**
+     * Compares a stored "I prefer quick/fast/easy/slow/elaborate meals" preference against a
+     * step-count proxy for this specific candidate's own complexity - the same kind of grounded
+     * proxy already used for {@link #ingredientCountReasonablenessScore}, not a fabricated
+     * cook-time estimate (no provider here reliably supplies real minutes). Null when there's no
+     * step data to judge complexity from.
+     */
+    private Double durationAlignment(String preference, List<String> steps) {
+        if (preference == null || steps == null || steps.isEmpty()) {
+            return null;
+        }
+        int stepCount = steps.size();
+        boolean wantsQuick = preference.equals("quick") || preference.equals("fast") || preference.equals("easy");
+        boolean wantsElaborate = preference.equals("slow") || preference.equals("elaborate");
+        if (!wantsQuick && !wantsElaborate) {
+            return null;
+        }
+        if (wantsQuick) {
+            if (stepCount <= 5) {
+                return 1.0;
+            }
+            if (stepCount <= 8) {
+                return 0.0;
+            }
+            return -0.5;
+        }
+        // wantsElaborate
+        if (stepCount >= 8) {
+            return 1.0;
+        }
+        if (stepCount >= 5) {
+            return 0.0;
+        }
+        return -0.3;
+    }
+
+    /**
      * Smart Variety: a soft, purely additive penalty for recipes the user has been shown
      * recently, so the same handful of dishes don't dominate every recommendation. Never an
      * exclusion - {@code profile.getRecentRecipeTitles()} only informs ranking, and an
@@ -653,6 +696,7 @@ public class RecipeScoringEngine {
         boolean addedFavorite = false;
         boolean addedHealthGoal = false;
         boolean addedServingSize = false;
+        boolean addedDuration = false;
 
         for (UserProfileSnapshot.PreferenceSignal pref : profile.getPreferences()) {
             if (pref.getConfidence() < 0.6) {
@@ -676,6 +720,13 @@ public class RecipeScoringEngine {
                 if (alignment != null && alignment >= 1.0) {
                     explanations.add("Serves about as many as you usually cook for.");
                     addedServingSize = true;
+                }
+            }
+            if (!addedDuration && pref.getCategory() == PreferenceCategory.PREFERRED_COOKING_DURATION) {
+                Double alignment = durationAlignment(pref.getValue(), candidate.getSteps());
+                if (alignment != null && alignment >= 1.0) {
+                    explanations.add("Matches your preference for " + pref.getValue() + " meals.");
+                    addedDuration = true;
                 }
             }
         }
