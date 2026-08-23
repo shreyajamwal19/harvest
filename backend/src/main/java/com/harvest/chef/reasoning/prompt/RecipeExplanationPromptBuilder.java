@@ -1,8 +1,10 @@
 package com.harvest.chef.reasoning.prompt;
 
 import com.harvest.chef.dto.ConversationContext;
+import com.harvest.chef.dto.NutritionInfo;
 import com.harvest.chef.dto.RecipeResponse;
 import com.harvest.chef.dto.RetrievalPlan;
+import com.harvest.chef.knowledge.model.IngredientProfile;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -68,7 +70,8 @@ public class RecipeExplanationPromptBuilder {
             """;
 
     public LLMPrompt buildForInitialTurn(ConversationContext context, RetrievalPlan plan,
-                                          List<RecipeResponse> rankedRecipes, List<String> userMemoryNotes) {
+                                          List<RecipeResponse> rankedRecipes, List<String> userMemoryNotes,
+                                          List<NutritionInfo> nutritionInfo, List<IngredientProfile> ingredientProfiles) {
         StringBuilder prompt = new StringBuilder();
         RecipeContextFormatter.appendRecentTurns(prompt, context);
         prompt.append("User's latest message: ").append(context.getCurrentMessage()).append('\n');
@@ -113,6 +116,8 @@ public class RecipeExplanationPromptBuilder {
                 prompt.append("- ").append(note).append('\n');
             }
         }
+        RecipeContextFormatter.appendNutritionInfo(prompt, nutritionInfo);
+        RecipeContextFormatter.appendIngredientProfiles(prompt, ingredientProfiles);
 
         prompt.append("\nRetrieved recipes (already ranked by the deterministic engine, most relevant first):\n");
         appendRecipesOrNone(prompt, rankedRecipes);

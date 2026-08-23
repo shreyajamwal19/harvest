@@ -2,7 +2,9 @@ package com.harvest.chef.reasoning.prompt;
 
 import com.harvest.chef.dto.ConversationContext;
 import com.harvest.chef.dto.ConversationTurn;
+import com.harvest.chef.dto.NutritionInfo;
 import com.harvest.chef.dto.RecipeResponse;
+import com.harvest.chef.knowledge.model.IngredientProfile;
 
 import java.util.List;
 
@@ -90,5 +92,64 @@ public final class RecipeContextFormatter {
 
     private static List<String> nullSafe(List<String> list) {
         return list == null ? List.of() : list;
+    }
+
+    /**
+     * USDA-grounded nutrition data the Retrieval Orchestrator already fetched this turn (only
+     * when {@code RetrievalPlan#needsNutritionGrounding} was true) but which nothing previously
+     * consumed - real API calls whose result was silently discarded. Every figure here traces
+     * back to {@link NutritionInfo#getSource()}; only include what's actually non-null.
+     */
+    public static void appendNutritionInfo(StringBuilder prompt, List<NutritionInfo> nutritionInfo) {
+        if (nutritionInfo == null || nutritionInfo.isEmpty()) {
+            return;
+        }
+        prompt.append("\nGrounded nutrition data (USDA-sourced - only state figures that appear here, ")
+                .append("never estimate your own):\n");
+        for (NutritionInfo info : nutritionInfo) {
+            prompt.append("- ").append(info.getMatchedFoodName() != null ? info.getMatchedFoodName()
+                    : info.getQueryTerm()).append(": ");
+            List<String> parts = new java.util.ArrayList<>();
+            if (info.getCalories() != null) {
+                parts.add(info.getCalories() + " kcal");
+            }
+            if (info.getProteinGrams() != null) {
+                parts.add(info.getProteinGrams() + "g protein");
+            }
+            if (info.getCarbsGrams() != null) {
+                parts.add(info.getCarbsGrams() + "g carbs");
+            }
+            if (info.getFatGrams() != null) {
+                parts.add(info.getFatGrams() + "g fat");
+            }
+            prompt.append(String.join(", ", parts)).append(" (source: ").append(info.getSource()).append(")\n");
+        }
+    }
+
+    /**
+     * Ingredient substitution/pairing/storage facts the Retrieval Orchestrator already fetched
+     * this turn (only when {@code RetrievalPlan#needsIngredientIntelligence} was true) but which
+     * nothing previously consumed for recipe-recommendation turns.
+     */
+    public static void appendIngredientProfiles(StringBuilder prompt, List<IngredientProfile> profiles) {
+        if (profiles == null || profiles.isEmpty()) {
+            return;
+        }
+        prompt.append("\nIngredient facts already looked up (use only if relevant to the recommendation, ")
+                .append("don't force it in):\n");
+        for (IngredientProfile profile : profiles) {
+            prompt.append("- ").append(profile.getName()).append(": ");
+            List<String> parts = new java.util.ArrayList<>();
+            if (profile.getSubstitutes() != null && !profile.getSubstitutes().isEmpty()) {
+                parts.add("substitutes [" + String.join(", ", profile.getSubstitutes()) + "]");
+            }
+            if (profile.getStorageAdvice() != null && !profile.getStorageAdvice().isBlank()) {
+                parts.add("storage: " + profile.getStorageAdvice());
+            }
+            if (profile.getShelfLife() != null && !profile.getShelfLife().isBlank()) {
+                parts.add("shelf life: " + profile.getShelfLife());
+            }
+            prompt.append(String.join("; ", parts)).append('\n');
+        }
     }
 }

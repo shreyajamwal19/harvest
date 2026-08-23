@@ -4,9 +4,11 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.harvest.chef.dto.ChefResponseType;
 import com.harvest.chef.dto.ConversationContext;
+import com.harvest.chef.dto.NutritionInfo;
 import com.harvest.chef.dto.RecipeResponse;
 import com.harvest.chef.dto.RetrievalPlan;
 import com.harvest.chef.exception.ChefReasoningException;
+import com.harvest.chef.knowledge.model.IngredientProfile;
 import com.harvest.chef.llm.LLMProviderManager;
 import com.harvest.chef.llm.LLMResult;
 import com.harvest.chef.reasoning.prompt.ChefCoachingPromptBuilder;
@@ -75,9 +77,11 @@ public class ChefReasoningService {
      */
     public Optional<ChefReasoningResult> reasonAboutRecipes(ConversationContext context, RetrievalPlan plan,
                                                               List<RecipeResponse> rankedRecipes,
-                                                              List<String> userMemoryNotes) {
+                                                              List<String> userMemoryNotes,
+                                                              List<NutritionInfo> nutritionInfo,
+                                                              List<IngredientProfile> ingredientProfiles) {
         LLMPrompt prompt = recipeExplanationPromptBuilder.buildForInitialTurn(context, plan, rankedRecipes,
-                userMemoryNotes);
+                userMemoryNotes, nutritionInfo, ingredientProfiles);
         return callAndParseExplanation(prompt, rankedRecipes.isEmpty(), ReasoningMode.RECIPE_EXPLANATION,
                 ReasoningConfidence.HIGH);
     }
