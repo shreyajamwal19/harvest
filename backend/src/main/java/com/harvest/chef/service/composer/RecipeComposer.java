@@ -74,7 +74,8 @@ public class RecipeComposer implements ResponseComposer {
         // AI Chef Reasoning Layer: interprets the request and explains/recommends among the
         // recipes above. It cannot change which recipes are returned - only the message, and
         // only the response type when nothing was found at all (see ChefReasoningService).
-        Optional<ChefReasoningResult> reasoning = chefReasoningService.reasonAboutRecipes(context, plan, recipes);
+        Optional<ChefReasoningResult> reasoning =
+                chefReasoningService.reasonAboutRecipes(context, plan, recipes, bundle.getUserMemoryNotes());
 
         String message = reasoning.map(ChefReasoningResult::getMessage)
                 .orElseGet(() -> buildSummaryMessage(recipes, plan.isContinuation()));

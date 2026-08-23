@@ -41,6 +41,9 @@ public class RecipeExplanationPromptBuilder {
               would mention in passing - "this freezes well", "don't rush browning the onions",
               "prep everything before the pan gets hot". Only when it's specific to this recipe and
               actually useful, never as a stock line, and never more than one per response.
+            - If "Things this user has mentioned in past conversations" is provided below, you may
+              use it to sound like you know the person - but only when it's genuinely relevant to
+              this recommendation, and never state it as fact about the current message.
             - If zero recipes are listed below, say so honestly. If the request suggests a nearby
               angle worth trying instead (a related ingredient, an adjacent cuisine, a broader
               category), name ONE concretely rather than just apologizing - then, if it would
@@ -65,7 +68,7 @@ public class RecipeExplanationPromptBuilder {
             """;
 
     public LLMPrompt buildForInitialTurn(ConversationContext context, RetrievalPlan plan,
-                                          List<RecipeResponse> rankedRecipes) {
+                                          List<RecipeResponse> rankedRecipes, List<String> userMemoryNotes) {
         StringBuilder prompt = new StringBuilder();
         RecipeContextFormatter.appendRecentTurns(prompt, context);
         prompt.append("User's latest message: ").append(context.getCurrentMessage()).append('\n');
@@ -98,6 +101,17 @@ public class RecipeExplanationPromptBuilder {
         if (plan.isContinuation()) {
             prompt.append("This is a \"more\" turn - the user wants additional options beyond what "
                     + "was already shown.\n");
+        }
+        if (userMemoryNotes != null && !userMemoryNotes.isEmpty()) {
+            // Things the user has said in OTHER past sessions - not this conversation. Purely
+            // supplementary color for the message (e.g. noticing a repeated craving or context),
+            // never a substitute for what's actually in the recipes/plan above, and never
+            // grounds for claiming the user "has" an ingredient or stated a preference this turn.
+            prompt.append("\nThings this user has mentioned in past conversations (context only, ")
+                    .append("don't treat as true for this message unless it also appears above): \n");
+            for (String note : userMemoryNotes) {
+                prompt.append("- ").append(note).append('\n');
+            }
         }
 
         prompt.append("\nRetrieved recipes (already ranked by the deterministic engine, most relevant first):\n");

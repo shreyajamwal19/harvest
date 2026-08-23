@@ -74,8 +74,10 @@ public class ChefReasoningService {
      * when the list is empty, the response type) can come from here.
      */
     public Optional<ChefReasoningResult> reasonAboutRecipes(ConversationContext context, RetrievalPlan plan,
-                                                              List<RecipeResponse> rankedRecipes) {
-        LLMPrompt prompt = recipeExplanationPromptBuilder.buildForInitialTurn(context, plan, rankedRecipes);
+                                                              List<RecipeResponse> rankedRecipes,
+                                                              List<String> userMemoryNotes) {
+        LLMPrompt prompt = recipeExplanationPromptBuilder.buildForInitialTurn(context, plan, rankedRecipes,
+                userMemoryNotes);
         return callAndParseExplanation(prompt, rankedRecipes.isEmpty(), ReasoningMode.RECIPE_EXPLANATION,
                 ReasoningConfidence.HIGH);
     }
