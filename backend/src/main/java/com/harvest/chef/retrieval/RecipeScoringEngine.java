@@ -484,11 +484,19 @@ public class RecipeScoringEngine {
                         contributions.add(pref.getConfidence() * alignment);
                     }
                 }
+                case PREFERRED_SERVING_SIZE -> {
+                    // RecipeCandidate.servings is real, provider-supplied data (never
+                    // guessed), so unlike COOKING_SKILL/DURATION/APPLIANCE this preference
+                    // IS derivable without inventing anything - it just wasn't wired in.
+                    Double alignment = servingSizeAlignment(pref.getValue(), candidate.getServings());
+                    if (alignment != null) {
+                        contributions.add(pref.getConfidence() * alignment);
+                    }
+                }
                 default -> {
-                    // COOKING_SKILL / PREFERRED_COOKING_DURATION / PREFERRED_SERVING_SIZE /
-                    // FAVORITE_APPLIANCE aren't derivable from candidate text alone with what
-                    // RecipeCandidate carries today - left for a future refinement rather than
-                    // guessed at.
+                    // COOKING_SKILL / PREFERRED_COOKING_DURATION / FAVORITE_APPLIANCE aren't
+                    // derivable from candidate text alone with what RecipeCandidate carries
+                    // today - left for a future refinement rather than guessed at.
                 }
             }
         }
@@ -569,6 +577,40 @@ public class RecipeScoringEngine {
     }
 
     /**
+     * Compares a stored "I usually cook for N" preference (stored as a plain digit string by
+     * {@code PreferenceLearningService#SERVING_SIZE_PATTERN}) against this specific candidate's
+     * own {@code servings} field. Grounded in real per-recipe data, not a guess - a recipe that
+     * serves way more or fewer people than the user actually cooks for is a genuinely worse fit,
+     * independent of how well its ingredients match. Null (no signal, not a penalty) when either
+     * side of the comparison isn't available.
+     */
+    private Double servingSizeAlignment(String preferredServingSizeValue, Integer candidateServings) {
+        if (preferredServingSizeValue == null || candidateServings == null || candidateServings <= 0) {
+            return null;
+        }
+        int preferred;
+        try {
+            preferred = Integer.parseInt(preferredServingSizeValue.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+        if (preferred <= 0) {
+            return null;
+        }
+        int diff = Math.abs(preferred - candidateServings);
+        if (diff == 0) {
+            return 1.0;
+        }
+        if (diff == 1) {
+            return 0.5;
+        }
+        if (diff <= preferred) {
+            return -0.2;
+        }
+        return -0.4;
+    }
+
+    /**
      * Smart Variety: a soft, purely additive penalty for recipes the user has been shown
      * recently, so the same handful of dishes don't dominate every recommendation. Never an
      * exclusion - {@code profile.getRecentRecipeTitles()} only informs ranking, and an
@@ -610,6 +652,7 @@ public class RecipeScoringEngine {
         String combinedText = combinedLowerText(candidate);
         boolean addedFavorite = false;
         boolean addedHealthGoal = false;
+        boolean addedServingSize = false;
 
         for (UserProfileSnapshot.PreferenceSignal pref : profile.getPreferences()) {
             if (pref.getConfidence() < 0.6) {
@@ -626,6 +669,13 @@ public class RecipeScoringEngine {
                 if (alignment != null && alignment > 0.5) {
                     explanations.add("Fits your " + pref.getValue().replace('_', ' ') + " goal.");
                     addedHealthGoal = true;
+                }
+            }
+            if (!addedServingSize && pref.getCategory() == PreferenceCategory.PREFERRED_SERVING_SIZE) {
+                Double alignment = servingSizeAlignment(pref.getValue(), candidate.getServings());
+                if (alignment != null && alignment >= 1.0) {
+                    explanations.add("Serves about as many as you usually cook for.");
+                    addedServingSize = true;
                 }
             }
         }
