@@ -144,6 +144,7 @@ public class LocalRecipeProvider implements RecipeKnowledgeProvider {
                 .ingredients(recipe.getIngredients())
                 .steps(recipe.getSteps())
                 .source(getName())
+                .cuisine(recipe.getCuisine())
                 .build();
     }
 

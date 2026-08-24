@@ -23,4 +23,8 @@ public class RecipeCandidate {
     /** Real photo URL from the source provider (e.g. TheMealDB's strMealThumb). Null when the
      *  provider has no image of its own - never filled in with a placeholder or invented URL. */
     private String imageUrl;
+    /** Real cuisine/region from the source provider (Recipe#cuisine locally, TheMealDB's
+     *  strArea externally) - e.g. "Italian", "Indian". Null when the provider has none;
+     *  never guessed from the title/ingredients. */
+    private String cuisine;
 }

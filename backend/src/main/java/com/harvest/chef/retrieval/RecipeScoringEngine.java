@@ -1282,7 +1282,8 @@ public class RecipeScoringEngine {
     private String combinedLowerText(RecipeCandidate candidate) {
         String title = candidate.getTitle() == null ? "" : candidate.getTitle();
         String ingredients = candidate.getIngredients() == null ? "" : String.join(" ", candidate.getIngredients());
-        return (title + " " + ingredients).toLowerCase(Locale.ROOT);
+        String cuisine = candidate.getCuisine() == null ? "" : candidate.getCuisine();
+        return (title + " " + ingredients + " " + cuisine).toLowerCase(Locale.ROOT);
     }
 
     /**

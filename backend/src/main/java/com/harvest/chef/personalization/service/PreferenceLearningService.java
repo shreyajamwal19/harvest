@@ -70,6 +70,17 @@ public class PreferenceLearningService {
                     Pattern.CASE_INSENSITIVE);
     private static final Pattern SERVING_SIZE_PATTERN =
             Pattern.compile("\\bi\\s+(?:usually\\s+)?cook\\s+for\\s+(\\d{1,2})\\b", Pattern.CASE_INSENSITIVE);
+    // Checked before the generic LOVE_PATTERN catch-all so "I love Italian food" is stored as a
+    // cuisine preference, not miscategorized as loving the literal ingredient "italian". Vocabulary
+    // mirrors what the recipe providers actually supply as cuisine (Recipe#cuisine locally,
+    // TheMealDB's strArea externally), kept intentionally closed rather than any free-form word
+    // before "food"/"cuisine" - a closed list can't be tricked into learning nonsense.
+    private static final Pattern CUISINE_PATTERN = Pattern.compile(
+            "\\bi\\s+(?:love|really like|enjoy|prefer)\\s+(italian|mexican|indian|chinese|thai|japanese|french"
+                    + "|greek|spanish|korean|vietnamese|mediterranean|american|british|irish|moroccan|caribbean"
+                    + "|middle eastern|turkish|lebanese|ethiopian|jamaican|cajun|southern|tex-mex)"
+                    + "\\s+(?:food|cuisine|cooking|dishes|recipes)?\\b",
+            Pattern.CASE_INSENSITIVE);
     // Phase 7 - health goals (Part 3). Values are normalized to the exact tokens
     // RecipeScoringEngine#healthGoalAlignment recognizes; anything else stored under
     // HEALTH_GOAL is silently a no-op there rather than mis-scored, so this pattern set and
@@ -132,6 +143,12 @@ public class PreferenceLearningService {
             if (raw != null) {
                 learned.add(new LearnedPreference(PreferenceCategory.HEALTH_GOAL, mapHealthGoal(raw), true));
             }
+        }
+
+        Matcher cuisine = CUISINE_PATTERN.matcher(message);
+        if (cuisine.find()) {
+            learned.add(new LearnedPreference(PreferenceCategory.FAVORITE_CUISINE,
+                    normalize(cuisine.group(1)), true));
         }
 
         // Only apply the generic love/hate catch-alls if a more specific pattern above didn't
