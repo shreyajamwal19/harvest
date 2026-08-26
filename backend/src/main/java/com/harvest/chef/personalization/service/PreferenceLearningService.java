@@ -114,8 +114,12 @@ public class PreferenceLearningService {
 
         Matcher dietary = DIETARY_PATTERN.matcher(message);
         if (dietary.find()) {
+            // "gluten free" and "gluten-free" are the same restriction stated two different ways -
+            // canonicalize to one form so they don't end up as two distinct stored preference
+            // values (which would both fail to dedupe against each other and show up twice in
+            // "show my preferences").
             learned.add(new LearnedPreference(PreferenceCategory.DIETARY_RESTRICTION,
-                    normalize(dietary.group(1)), true));
+                    normalize(dietary.group(1)).replace(' ', '-'), true));
         }
 
         Matcher dontEat = DONT_EAT_PATTERN.matcher(message);
