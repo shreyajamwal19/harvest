@@ -1283,7 +1283,8 @@ public class RecipeScoringEngine {
         String title = candidate.getTitle() == null ? "" : candidate.getTitle();
         String ingredients = candidate.getIngredients() == null ? "" : String.join(" ", candidate.getIngredients());
         String cuisine = candidate.getCuisine() == null ? "" : candidate.getCuisine();
-        return (title + " " + ingredients + " " + cuisine).toLowerCase(Locale.ROOT);
+        String mealCategory = candidate.getMealCategory() == null ? "" : candidate.getMealCategory();
+        return (title + " " + ingredients + " " + cuisine + " " + mealCategory).toLowerCase(Locale.ROOT);
     }
 
     /**

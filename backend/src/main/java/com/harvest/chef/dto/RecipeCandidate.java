@@ -27,4 +27,8 @@ public class RecipeCandidate {
      *  strArea externally) - e.g. "Italian", "Indian". Null when the provider has none;
      *  never guessed from the title/ingredients. */
     private String cuisine;
+    /** Real meal category from the source provider (TheMealDB's strCategory - e.g. "Dessert",
+     *  "Breakfast", "Seafood", "Starter"). No local-table equivalent yet, so always null for
+     *  "local" candidates; never guessed from the title/ingredients. */
+    private String mealCategory;
 }

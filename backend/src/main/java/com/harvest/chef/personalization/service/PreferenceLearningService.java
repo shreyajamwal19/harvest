@@ -89,6 +89,16 @@ public class PreferenceLearningService {
             "\\bi\\s+(?:love|really like|enjoy|prefer)\\s+(" + String.join("|", KNOWN_CUISINES) + ")"
                     + "\\s+(?:food|cuisine|cooking|dishes|recipes)?\\b",
             Pattern.CASE_INSENSITIVE);
+    // Same idea as CUISINE_PATTERN, but for TheMealDB's strCategory vocabulary (the only provider
+    // that supplies this - RecipeCandidate#mealCategory is always null for local recipes). Kept
+    // deliberately narrow to categories a person would actually phrase as "I love ___": excludes
+    // vegan/vegetarian (those are DIETARY_RESTRICTION, handled separately) and excludes plain meat
+    // names like beef/chicken/lamb (those are FAVORITE_INGREDIENT, not a meal category).
+    private static final Pattern MEAL_CATEGORY_PATTERN = Pattern.compile(
+            "\\bi\\s+(?:love|really like|enjoy|prefer)\\s+(breakfast|dessert(?:s)?|seafood|pasta|starter(?:s)?"
+                    + "|appetizer(?:s)?|side dish(?:es)?|soup(?:s)?|salad(?:s)?)"
+                    + "\\s+(?:food|foods|dishes|recipes)?\\b",
+            Pattern.CASE_INSENSITIVE);
     // Phase 7 - health goals (Part 3). Values are normalized to the exact tokens
     // RecipeScoringEngine#healthGoalAlignment recognizes; anything else stored under
     // HEALTH_GOAL is silently a no-op there rather than mis-scored, so this pattern set and
@@ -163,6 +173,12 @@ public class PreferenceLearningService {
                     normalize(cuisine.group(1)), true));
         }
 
+        Matcher mealCategory = MEAL_CATEGORY_PATTERN.matcher(message);
+        if (mealCategory.find()) {
+            learned.add(new LearnedPreference(PreferenceCategory.FAVORITE_MEAL_CATEGORY,
+                    canonicalizeMealCategory(mealCategory.group(1)), true));
+        }
+
         // Only apply the generic love/hate catch-alls if a more specific pattern above didn't
         // already claim this message, to avoid double-counting ("I don't eat seafood" shouldn't
         // also fire the generic hate pattern).
@@ -219,6 +235,26 @@ public class PreferenceLearningService {
             }
         }
         return persisted;
+    }
+
+    /**
+     * Singularizes/aliases a matched MEAL_CATEGORY_PATTERN capture to line up with what
+     * TheMealDB's strCategory actually supplies (singular, "Starter" not "appetizer") - so the
+     * stored preference value can actually be found by {@code containsAsWord} against a real
+     * candidate's mealCategory text, not just a plausible-looking synonym of it.
+     */
+    private String canonicalizeMealCategory(String raw) {
+        String value = normalize(raw).toLowerCase(Locale.ROOT);
+        if (value.equals("appetizers") || value.equals("appetizer") || value.equals("starters")) {
+            return "starter";
+        }
+        if (value.equals("side dishes") || value.equals("side dish")) {
+            return "side";
+        }
+        if (value.endsWith("s") && !value.equals("pasta")) {
+            return value.substring(0, value.length() - 1);
+        }
+        return value;
     }
 
     private String normalize(String raw) {

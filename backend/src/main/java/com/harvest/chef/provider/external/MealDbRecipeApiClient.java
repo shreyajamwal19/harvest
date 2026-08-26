@@ -84,6 +84,11 @@ public class MealDbRecipeApiClient implements ExternalRecipeApiClient {
             cuisine = null;
         }
 
+        String mealCategory = meal.path("strCategory").asText(null);
+        if (mealCategory != null && mealCategory.isBlank()) {
+            mealCategory = null;
+        }
+
         return RecipeCandidate.builder()
                 .title(meal.path("strMeal").asText("Untitled dish"))
                 .description("A " + meal.path("strArea").asText("") + " " + meal.path("strCategory").asText("")
@@ -94,6 +99,7 @@ public class MealDbRecipeApiClient implements ExternalRecipeApiClient {
                 .source(apiName())
                 .imageUrl(imageUrl)
                 .cuisine(cuisine)
+                .mealCategory(mealCategory)
                 .build();
     }
 
