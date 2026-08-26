@@ -97,6 +97,7 @@ public class RecipeCategoryClassifier {
                 ? "" : String.join(" ", candidate.getIngredients()).toLowerCase(Locale.ROOT);
 
         Set<Category> matched = new LinkedHashSet<>();
+        mapMealCategory(candidate.getMealCategory()).ifPresent(matched::add);
         for (Category category : Category.values()) {
             if (matchesAny(titleLower, TITLE_KEYWORDS.getOrDefault(category, Set.of()))
                     || matchesAny(ingredientsLower, INGREDIENT_KEYWORDS.getOrDefault(category, Set.of()))) {
@@ -108,6 +109,13 @@ public class RecipeCategoryClassifier {
 
     /** The single strongest category, or empty if nothing matched - title matches always outrank ingredient-only ones. */
     public Optional<Category> primaryCategory(RecipeCandidate candidate) {
+        // TheMealDB's own strCategory (when present) is real provider-supplied ground truth,
+        // not a keyword guess from the title - stronger than any TITLE_KEYWORDS match, so it's
+        // checked first rather than only as a tiebreaker buried inside classify().
+        Optional<Category> fromProvider = mapMealCategory(candidate.getMealCategory());
+        if (fromProvider.isPresent()) {
+            return fromProvider;
+        }
         String titleLower = candidate.getTitle() == null ? "" : candidate.getTitle().toLowerCase(Locale.ROOT);
         for (Category category : Category.values()) {
             if (matchesAny(titleLower, TITLE_KEYWORDS.getOrDefault(category, Set.of()))) {
@@ -116,6 +124,28 @@ public class RecipeCategoryClassifier {
         }
         Set<Category> all = classify(candidate);
         return all.stream().findFirst();
+    }
+
+    /**
+     * Maps TheMealDB's strCategory to our Category enum, but only where the two concepts are
+     * genuinely the same thing - "Dessert"/"Breakfast"/"Side"/"Pasta" translate directly.
+     * Deliberately NOT mapped: "Starter" (could be soup, salad, or a dip - guessing which one
+     * would be worse than no signal), and protein/diet groupings like "Beef"/"Chicken"/"Lamb"/
+     * "Pork"/"Goat"/"Seafood"/"Vegetarian"/"Vegan"/"Miscellaneous" - those describe an
+     * ingredient or diet, not a meal-type category, so forcing them into this enum would be a
+     * category error, not a genuine classification.
+     */
+    private Optional<Category> mapMealCategory(String mealCategory) {
+        if (mealCategory == null || mealCategory.isBlank()) {
+            return Optional.empty();
+        }
+        return switch (mealCategory.trim().toLowerCase(Locale.ROOT)) {
+            case "dessert" -> Optional.of(Category.DESSERT);
+            case "breakfast" -> Optional.of(Category.BREAKFAST);
+            case "side" -> Optional.of(Category.SIDE_DISH);
+            case "pasta" -> Optional.of(Category.PASTA);
+            default -> Optional.empty();
+        };
     }
 
     private boolean matchesAny(String text, Set<String> keywords) {
