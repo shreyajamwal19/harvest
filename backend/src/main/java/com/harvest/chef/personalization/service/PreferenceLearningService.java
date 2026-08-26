@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -70,15 +71,22 @@ public class PreferenceLearningService {
                     Pattern.CASE_INSENSITIVE);
     private static final Pattern SERVING_SIZE_PATTERN =
             Pattern.compile("\\bi\\s+(?:usually\\s+)?cook\\s+for\\s+(\\d{1,2})\\b", Pattern.CASE_INSENSITIVE);
+    // Closed vocabulary of real cuisine names the recipe providers actually supply (Recipe#cuisine
+    // locally, TheMealDB's strArea externally) - shared by CUISINE_PATTERN below and by
+    // MemoryCommandService for "remember I like X" commands, so the same statement is
+    // categorized as FAVORITE_CUISINE consistently regardless of how it's phrased.
+    private static final Set<String> KNOWN_CUISINES = Set.of(
+            "italian", "mexican", "indian", "chinese", "thai", "japanese", "french", "greek",
+            "spanish", "korean", "vietnamese", "mediterranean", "american", "british", "irish",
+            "moroccan", "caribbean", "middle eastern", "turkish", "lebanese", "ethiopian",
+            "jamaican", "cajun", "southern", "tex-mex");
     // Checked before the generic LOVE_PATTERN catch-all so "I love Italian food" is stored as a
     // cuisine preference, not miscategorized as loving the literal ingredient "italian". Vocabulary
     // mirrors what the recipe providers actually supply as cuisine (Recipe#cuisine locally,
     // TheMealDB's strArea externally), kept intentionally closed rather than any free-form word
     // before "food"/"cuisine" - a closed list can't be tricked into learning nonsense.
     private static final Pattern CUISINE_PATTERN = Pattern.compile(
-            "\\bi\\s+(?:love|really like|enjoy|prefer)\\s+(italian|mexican|indian|chinese|thai|japanese|french"
-                    + "|greek|spanish|korean|vietnamese|mediterranean|american|british|irish|moroccan|caribbean"
-                    + "|middle eastern|turkish|lebanese|ethiopian|jamaican|cajun|southern|tex-mex)"
+            "\\bi\\s+(?:love|really like|enjoy|prefer)\\s+(" + String.join("|", KNOWN_CUISINES) + ")"
                     + "\\s+(?:food|cuisine|cooking|dishes|recipes)?\\b",
             Pattern.CASE_INSENSITIVE);
     // Phase 7 - health goals (Part 3). Values are normalized to the exact tokens
@@ -217,6 +225,21 @@ public class PreferenceLearningService {
             }
         }
         return value;
+    }
+
+    /**
+     * Checks a raw phrase (e.g. an explicit "remember I like ___" command's argument) against
+     * the same closed cuisine vocabulary {@link #CUISINE_PATTERN} uses, so "remember I like
+     * Italian food" categorizes identically to saying "I love Italian food" in conversation
+     * instead of falling back to FAVORITE_INGREDIENT just because it arrived via a different
+     * command path. Returns empty when the phrase isn't a recognized cuisine name.
+     */
+    public java.util.Optional<String> matchCuisine(String rawPhrase) {
+        if (rawPhrase == null || rawPhrase.isBlank()) {
+            return java.util.Optional.empty();
+        }
+        String candidate = normalize(rawPhrase);
+        return KNOWN_CUISINES.contains(candidate) ? java.util.Optional.of(candidate) : java.util.Optional.empty();
     }
 
     private String firstNonNullGroup(Matcher matcher) {

@@ -73,6 +73,19 @@ public class MemoryCommandService {
         if (argument == null || argument.isBlank()) {
             return update("I didn't catch what to remember - try \"remember that I like tofu\", for example.");
         }
+        // "remember I like Italian food" should learn a cuisine preference, same as saying it in
+        // ordinary conversation would via PreferenceLearningService's CUISINE_PATTERN - otherwise
+        // the exact same statement gets miscategorized as FAVORITE_INGREDIENT just because it
+        // arrived through this command path instead. Only checked for the positive direction:
+        // there's no DISLIKED_CUISINE category to file a dislike under.
+        if (positive) {
+            java.util.Optional<String> cuisine = preferenceLearningService.matchCuisine(argument);
+            if (cuisine.isPresent()) {
+                userProfileService.reinforce(userId, PreferenceCategory.FAVORITE_CUISINE, cuisine.get(),
+                        PreferenceSource.EXPLICIT);
+                return update("Got it - I'll remember that you like " + cuisine.get() + " food.");
+            }
+        }
         PreferenceCategory category = positive ? PreferenceCategory.FAVORITE_INGREDIENT
                 : PreferenceCategory.DISLIKED_INGREDIENT;
         if (positive) {
