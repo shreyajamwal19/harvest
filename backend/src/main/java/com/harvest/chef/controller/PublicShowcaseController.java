@@ -3,8 +3,10 @@ package com.harvest.chef.controller;
 import com.harvest.chef.dto.RecipeCandidate;
 import com.harvest.chef.dto.ShowcaseRecipeResponse;
 import com.harvest.chef.provider.external.ExternalRecipeApiClient;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -35,10 +37,15 @@ public class PublicShowcaseController {
     );
 
     private final List<ExternalRecipeApiClient> externalRecipeApiClients;
+    private final ShowcaseRateLimiter showcaseRateLimiter;
 
     @GetMapping("/showcase")
     public ResponseEntity<ShowcaseRecipeResponse> showcase(
-            @RequestParam(required = false) String query) {
+            @RequestParam(required = false) String query, HttpServletRequest request) {
+        if (showcaseRateLimiter.isRateLimited(clientIp(request))) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).build();
+        }
+
         if (externalRecipeApiClients.isEmpty()) {
             return ResponseEntity.noContent().build();
         }
@@ -72,5 +79,19 @@ public class PublicShowcaseController {
             log.warn("Showcase search via '{}' failed: {}", client.apiName(), e.getMessage());
             return List.of();
         }
+    }
+
+    /**
+     * X-Forwarded-For is attacker-controllable when the request doesn't actually come through a
+     * trusted proxy, so this is only ever used as a rate-limit bucket key (abuse-dampening), not
+     * as an identity or security decision - spoofing it just means splitting one attacker's
+     * requests across more buckets, not bypassing anything security-critical.
+     */
+    private String clientIp(HttpServletRequest request) {
+        String forwardedFor = request.getHeader("X-Forwarded-For");
+        if (forwardedFor != null && !forwardedFor.isBlank()) {
+            return forwardedFor.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
     }
 }
