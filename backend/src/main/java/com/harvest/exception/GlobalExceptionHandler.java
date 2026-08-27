@@ -78,6 +78,14 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.UNAUTHORIZED, "Unauthorized", "Invalid email or password", request, null);
     }
 
+    // LoginAttemptService's lockout after repeated failed attempts on one email - 429, not 401,
+    // since the credentials themselves were never even checked this time.
+    @ExceptionHandler(AccountTemporarilyLockedException.class)
+    public ResponseEntity<ErrorResponse> handleAccountTemporarilyLocked(
+            AccountTemporarilyLockedException ex, HttpServletRequest request) {
+        return build(HttpStatus.TOO_MANY_REQUESTS, "Too Many Requests", ex.getMessage(), request, null);
+    }
+
     // Safety net in case UsernameNotFoundException ever propagates unwrapped.
     @ExceptionHandler(UsernameNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleUsernameNotFound(
