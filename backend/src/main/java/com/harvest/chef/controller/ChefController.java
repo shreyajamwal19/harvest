@@ -3,8 +3,10 @@ package com.harvest.chef.controller;
 import com.harvest.chef.dto.ChatRequest;
 import com.harvest.chef.dto.ChatResponse;
 import com.harvest.chef.dto.ChefResponseType;
+import com.harvest.chef.service.ChefChatRateLimiter;
 import com.harvest.chef.service.ChefOrchestrator;
 import com.harvest.entity.User;
+import com.harvest.exception.RateLimitExceededException;
 import com.harvest.exception.ResourceNotFoundException;
 import com.harvest.repository.UserRepository;
 import jakarta.validation.Valid;
@@ -26,12 +28,21 @@ public class ChefController {
 
     private final ChefOrchestrator chefOrchestrator;
     private final UserRepository userRepository;
+    private final ChefChatRateLimiter chefChatRateLimiter;
 
     @PostMapping("/chat")
     public ResponseEntity<ChatResponse> chat(@AuthenticationPrincipal UserDetails userDetails,
                                               @Valid @RequestBody ChatRequest request) {
         User user = userRepository.findByEmail(userDetails.getUsername())
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        // Checked before the try/catch below on purpose: that catch-all deliberately turns any
+        // failure into a normal 200 in-conversation response, which would silently swallow the
+        // 429 a rate-limited client needs to actually see and back off from.
+        if (chefChatRateLimiter.isRateLimited(user.getId())) {
+            throw new RateLimitExceededException(
+                    "You're sending messages a bit fast - please wait a moment and try again.");
+        }
 
         // The Chef Brain pipeline is the single most complex call in the app (retrieval,
         // scoring, personalization, session state, and multiple LLM calls all in one turn).
