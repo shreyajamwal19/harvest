@@ -2,12 +2,14 @@ package com.harvest.chef.controller;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * /api/public/showcase is deliberately unauthenticated (it backs the logged-out homepage), which
@@ -61,5 +63,14 @@ public class ShowcaseRateLimiter {
                     clientIp, result[0].count());
         }
         return limited;
+    }
+
+    /** Same reasoning as LoginAttemptService.evictExpiredEntries() - and more urgent here, since
+     *  this key is a spoofable IP an attacker could deliberately vary to grow this map rather
+     *  than just accumulate naturally over time. */
+    @Scheduled(fixedRate = 10, timeUnit = TimeUnit.MINUTES)
+    void evictExpiredEntries() {
+        Instant now = Instant.now();
+        requestsByIp.entrySet().removeIf(entry -> now.isAfter(entry.getValue().windowStart().plus(window)));
     }
 }

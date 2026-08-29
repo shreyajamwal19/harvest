@@ -2,12 +2,14 @@ package com.harvest.chef.service;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * /api/chef/chat had no rate limiting at all, despite being by far the most expensive endpoint
@@ -63,5 +65,14 @@ public class ChefChatRateLimiter {
                     userId, result[0].count());
         }
         return limited;
+    }
+
+    /** Same reasoning as LoginAttemptService.evictExpiredEntries(): without this, every distinct
+     *  userId that ever calls this endpoint accumulates a permanent entry for the process's
+     *  lifetime. Bounded here too - at most one entry per user who has ever chatted. */
+    @Scheduled(fixedRate = 10, timeUnit = TimeUnit.MINUTES)
+    void evictExpiredEntries() {
+        Instant now = Instant.now();
+        requestsByUserId.entrySet().removeIf(entry -> now.isAfter(entry.getValue().windowStart().plus(window)));
     }
 }

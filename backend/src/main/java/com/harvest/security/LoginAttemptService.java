@@ -1,12 +1,14 @@
 package com.harvest.security;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -76,5 +78,28 @@ public class LoginAttemptService {
     /** Clears any tracked failures on a successful login, so a locked-out account isn't stuck longer than necessary. */
     public void recordSuccess(String normalizedEmail) {
         attemptsByEmail.remove(normalizedEmail);
+    }
+
+    /**
+     * Without this, every distinct email that ever fails a login accumulates a permanent entry
+     * here for the lifetime of the process - isLocked()'s lazy cleanup only removes an entry when
+     * that same email is checked again after its lockout expires, so an email that fails once and
+     * is never retried just sits in the map forever. Runs every 10 minutes; cheap either way since
+     * this only ever holds as many entries as there are distinct emails that have failed a login.
+     */
+    @Scheduled(fixedRate = 10, timeUnit = TimeUnit.MINUTES)
+    void evictExpiredEntries() {
+        Instant now = Instant.now();
+        int before = attemptsByEmail.size();
+        attemptsByEmail.entrySet().removeIf(entry -> {
+            AttemptRecord record = entry.getValue();
+            boolean lockoutExpired = record.lockedUntil() == null || now.isAfter(record.lockedUntil());
+            boolean windowExpired = now.isAfter(record.windowStart().plus(FAILURE_WINDOW));
+            return lockoutExpired && windowExpired;
+        });
+        int removed = before - attemptsByEmail.size();
+        if (removed > 0) {
+            log.debug("[auth] evicted {} expired login-attempt entries", removed);
+        }
     }
 }
