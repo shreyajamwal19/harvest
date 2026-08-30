@@ -69,21 +69,61 @@ function MessageBubble({ turn, userName, savedTitles, pendingTitles, onToggleSav
   )
 }
 
+/**
+ * Signature loading moment for the one interaction that happens on every single turn: waiting on
+ * Chef Brain. A generic three-dot bounce works anywhere - this doesn't. A small line-art pot with
+ * steam wisps curling and fading upward, drawn in the same restrained lucide-style stroke used
+ * everywhere else in the app (currentColor, 1.75 stroke width, rounded caps), so it reads as part
+ * of the design system rather than a decoration bolted on.
+ */
+function SimmeringPotLoader() {
+  const wisp = (delay, xDrift) => ({
+    initial: { opacity: 0, y: 0, x: 0, scale: 0.7 },
+    animate: {
+      opacity: [0, 0.85, 0],
+      y: [-2, -15, -24],
+      x: [0, xDrift, xDrift * 1.6],
+      scale: [0.7, 1, 1.15],
+    },
+    transition: { duration: 1.8, repeat: Infinity, delay, ease: [0.22, 1, 0.36, 1] },
+  })
+
+  return (
+    <svg width="40" height="30" viewBox="0 0 40 30" fill="none" aria-hidden="true">
+      {/* Steam - three staggered wisps, each drifting a different direction so they never
+          overlap identically, the way real steam never repeats the same curl twice. */}
+      <motion.circle cx="14" cy="10" r="1.6" className="fill-gold-500/70" {...wisp(0, -3)} />
+      <motion.circle cx="20" cy="9" r="1.8" className="fill-brick-300/70" {...wisp(0.5, 2)} />
+      <motion.circle cx="26" cy="10" r="1.5" className="fill-gold-500/70" {...wisp(1, -2)} />
+
+      {/* Pot - simple line-art, matches lucide-react's stroke conventions used elsewhere */}
+      <path
+        d="M10 14h20l-1.5 9a3 3 0 0 1-3 2.5h-11a3 3 0 0 1-3-2.5L10 14Z"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinejoin="round"
+        className="text-ink-500"
+      />
+      <path d="M8 14h24" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" className="text-ink-600" />
+      <path
+        d="M12 14c0-2.5 3-3.5 8-3.5s8 1 8 3.5"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        className="text-ink-400"
+      />
+    </svg>
+  )
+}
+
 function TypingIndicator() {
   return (
     <div className="flex items-start gap-2.5">
       <span className="flex-shrink-0 w-7 h-7 rounded-full bg-gradient-to-br from-ink-700 to-ink-800 flex items-center justify-center">
         <ChefHat className="w-3.5 h-3.5 text-gold-300" strokeWidth={1.75} />
       </span>
-      <div className="bg-paper-50 border border-ink-700/8 rounded-2xl rounded-tl-md px-4 py-3.5 flex gap-1.5 shadow-soft">
-        {[0, 1, 2].map((i) => (
-          <motion.span
-            key={i}
-            className="w-1.5 h-1.5 bg-ink-400 rounded-full"
-            animate={{ y: [0, -4, 0] }}
-            transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15, ease: 'easeInOut' }}
-          />
-        ))}
+      <div className="bg-paper-50 border border-ink-700/8 rounded-2xl rounded-tl-md px-4 py-2.5 shadow-soft">
+        <SimmeringPotLoader />
       </div>
     </div>
   )

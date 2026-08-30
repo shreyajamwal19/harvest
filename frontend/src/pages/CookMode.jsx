@@ -89,23 +89,51 @@ function CookMode() {
   if (finished) {
     return (
       <div className="min-h-[calc(100vh-4rem)] max-w-lg mx-auto px-4 sm:px-6 py-16 text-center flex flex-col items-center">
-        <div className="w-14 h-14 bg-moss-100 rounded-full flex items-center justify-center mb-5">
-          <PartyPopper className="w-7 h-7 text-moss-500" strokeWidth={1.75} />
+        <div className="relative mb-5">
+          <motion.span
+            className="absolute inset-0 rounded-full bg-moss-300/40"
+            initial={{ opacity: 0.6, scale: 1 }}
+            animate={{ opacity: 0, scale: 1.9 }}
+            transition={{ duration: 1.4, ease: [0.22, 1, 0.36, 1] }}
+          />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.7 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+            className="relative w-14 h-14 bg-moss-100 rounded-full flex items-center justify-center"
+          >
+            <PartyPopper className="w-7 h-7 text-moss-500" strokeWidth={1.75} />
+          </motion.div>
         </div>
-        <h1 className="font-display text-2xl font-semibold text-ink-800 mb-2">
+        <motion.h1
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
+          className="font-display text-2xl font-semibold text-ink-800 mb-2"
+        >
           {recipe.title} - done!
-        </h1>
-        <p className="text-sm text-ink-500 mb-8 max-w-xs">
+        </motion.h1>
+        <motion.p
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, delay: 0.22, ease: [0.22, 1, 0.36, 1] }}
+          className="text-sm text-ink-500 mb-8 max-w-xs"
+        >
           Nicely done. Chef Brain will remember this so it can mix things up next time.
-        </p>
-        <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+        </motion.p>
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
+          className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto"
+        >
           <Link to="/chef" className="btn-primary">
             Back to Chef Brain
           </Link>
           <Link to="/saved" className="btn-secondary">
             Saved Recipes
           </Link>
-        </div>
+        </motion.div>
       </div>
     )
   }
