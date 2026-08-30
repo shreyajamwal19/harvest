@@ -9,13 +9,17 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * One-time startup importer for the 231k-recipe Food.com dataset, gated behind
+ * harvest.import.foodcom (default false). Skips entirely if the recipes table already has rows,
+ * so it's safe to leave the flag on across restarts.
+ */
 @Component
 @ConditionalOnProperty(name = "harvest.import.foodcom", havingValue = "true")
 public class FoodComImporter implements CommandLineRunner {
@@ -33,7 +37,6 @@ public class FoodComImporter implements CommandLineRunner {
     }
 
     @Override
-    @Transactional
     public void run(String... args) {
         if (recipeRepository.count() > 0) {
             log.info("Recipes table already contains rows. Skipping import.");
@@ -121,6 +124,16 @@ public class FoodComImporter implements CommandLineRunner {
     }
 
     private void saveBatch(List<Recipe> batch) {
+        // Deliberately NOT wrapped in the outer run()'s transaction (there isn't one anymore -
+        // @Transactional was removed from run() for exactly this reason): recipeRepository
+        // .saveAll() is transactional on its own by default, so each batch commits
+        // independently. With the whole 231k-row import in one giant transaction instead, a
+        // single bad row anywhere in the file would poison the entire transaction on Postgres
+        // (which refuses further commands once one statement in a transaction errors, until
+        // rollback) - meaning every batch after the first failure would fail too, and the
+        // eventual rollback would silently discard every recipe imported so far, batches that
+        // this method's own try/catch in run() believed had already succeeded. Per-batch
+        // commits make partial progress genuinely durable and one bad batch genuinely isolated.
         recipeRepository.saveAll(batch);
         entityManager.flush();
         entityManager.clear();
