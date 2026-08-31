@@ -125,4 +125,9 @@ export function regenerateMealPlanDay({ excludeTitles, mealType }) {
   return api.post('/meal-plan/regenerate-day', { excludeTitles, mealType })
 }
 
+/** Change password while logged in - PUT since it updates the existing user resource in place. */
+export function changePassword({ currentPassword, newPassword }) {
+  return api.put('/user/password', { currentPassword, newPassword })
+}
+
 export default api

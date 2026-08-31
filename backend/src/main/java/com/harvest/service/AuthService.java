@@ -1,12 +1,14 @@
 package com.harvest.service;
 
 import com.harvest.dto.AuthResponse;
+import com.harvest.dto.ChangePasswordRequest;
 import com.harvest.dto.LoginRequest;
 import com.harvest.dto.SignupRequest;
 import com.harvest.dto.UserDto;
 import com.harvest.entity.User;
 import com.harvest.exception.AccountTemporarilyLockedException;
 import com.harvest.exception.DuplicateResourceException;
+import com.harvest.exception.IncorrectPasswordException;
 import com.harvest.exception.ResourceNotFoundException;
 import com.harvest.repository.UserRepository;
 import com.harvest.security.JwtUtil;
@@ -110,6 +112,28 @@ public class AuthService {
 
     private String normalizeEmail(String email) {
         return email.trim().toLowerCase();
+    }
+
+    /**
+     * There was previously no way to change a password at all - not while logged in, not via a
+     * forgot-password flow. This covers the logged-in case, which needs no new infrastructure
+     * (no email delivery to set up and verify). A forgot-password-while-logged-out flow is a
+     * separate, larger feature (reset tokens, an email send) intentionally not attempted here -
+     * this sandbox has no way to actually send or verify an email, and shipping that unverified
+     * would risk a broken account-recovery path looking like it works when it doesn't.
+     */
+    @Transactional
+    public void changePassword(Long userId, ChangePasswordRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
+            throw new IncorrectPasswordException("Current password is incorrect");
+        }
+
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+        log.info("Password changed for user: {}", user.getEmail());
     }
 
     /**

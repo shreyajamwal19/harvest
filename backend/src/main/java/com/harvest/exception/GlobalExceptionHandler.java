@@ -86,6 +86,15 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.TOO_MANY_REQUESTS, "Too Many Requests", ex.getMessage(), request, null);
     }
 
+    // ChangePasswordRequest.currentPassword didn't match - 401, distinct message from
+    // handleBadCredentials since this isn't a login attempt (no email-enumeration concern here,
+    // the caller is already authenticated as this exact user).
+    @ExceptionHandler(IncorrectPasswordException.class)
+    public ResponseEntity<ErrorResponse> handleIncorrectPassword(
+            IncorrectPasswordException ex, HttpServletRequest request) {
+        return build(HttpStatus.UNAUTHORIZED, "Unauthorized", ex.getMessage(), request, null);
+    }
+
     // ChefChatRateLimiter and any other per-user rate limit.
     @ExceptionHandler(RateLimitExceededException.class)
     public ResponseEntity<ErrorResponse> handleRateLimitExceeded(

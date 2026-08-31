@@ -1,21 +1,27 @@
 package com.harvest.controller;
 
+import com.harvest.dto.ChangePasswordRequest;
 import com.harvest.dto.SessionResponse;
 import com.harvest.dto.UserDto;
 import com.harvest.entity.User;
 import com.harvest.exception.ResourceNotFoundException;
 import com.harvest.repository.UserRepository;
 import com.harvest.security.JwtAuthFilter;
+import com.harvest.service.AuthService;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/user")
@@ -23,6 +29,7 @@ import java.time.Instant;
 public class UserController {
 
     private final UserRepository userRepository;
+    private final AuthService authService;
 
     @GetMapping("/me")
     public ResponseEntity<SessionResponse> getCurrentUser(@AuthenticationPrincipal UserDetails userDetails,
@@ -38,5 +45,16 @@ public class UserController {
                 .build();
 
         return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/password")
+    public ResponseEntity<Map<String, String>> changePassword(@AuthenticationPrincipal UserDetails userDetails,
+                                                                @Valid @RequestBody ChangePasswordRequest request) {
+        User user = userRepository.findByEmail(userDetails.getUsername())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        authService.changePassword(user.getId(), request);
+
+        return ResponseEntity.ok(Map.of("message", "Password updated successfully"));
     }
 }

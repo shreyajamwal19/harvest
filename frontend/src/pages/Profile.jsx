@@ -1,10 +1,11 @@
 /* eslint-disable react/prop-types -- this project doesn't use PropTypes, see AuthContext.jsx */
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { motion } from 'framer-motion'
-import { LogOut, ShoppingBasket, Bookmark, ArrowUpRight } from 'lucide-react'
+import { useForm } from 'react-hook-form'
+import { motion, AnimatePresence } from 'framer-motion'
+import { LogOut, ShoppingBasket, Bookmark, ArrowUpRight, KeyRound, Eye, EyeOff, Check } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import { getPantryItems, getSavedRecipes } from '../services/api'
+import { getPantryItems, getSavedRecipes, changePassword, getErrorMessage } from '../services/api'
 
 function initials(name) {
   if (!name) return '?'
@@ -43,12 +44,130 @@ function StatCard({ to, icon: Icon, label, value, loading }) {
   )
 }
 
+function ChangePasswordForm({ onDone }) {
+  const [showCurrent, setShowCurrent] = useState(false)
+  const [showNew, setShowNew] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm()
+
+  const onSubmit = async (data) => {
+    setError('')
+    setIsSubmitting(true)
+    try {
+      await changePassword({ currentPassword: data.currentPassword, newPassword: data.newPassword })
+      setSuccess(true)
+      reset()
+      setTimeout(() => onDone(), 1200)
+    } catch (err) {
+      setError(getErrorMessage(err, 'Could not update your password'))
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  if (success) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-moss-600 py-2">
+        <Check className="w-4 h-4" strokeWidth={1.75} />
+        Password updated.
+      </div>
+    )
+  }
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-3 pt-1">
+      {error && (
+        <div className="px-3.5 py-2.5 bg-brick-50 border border-brick-200 rounded-sheet text-brick-600 text-sm">
+          {error}
+        </div>
+      )}
+
+      <div>
+        <label htmlFor="currentPassword" className="block text-xs font-medium text-ink-600 mb-1">
+          Current password
+        </label>
+        <div className="relative">
+          <input
+            id="currentPassword"
+            type={showCurrent ? 'text' : 'password'}
+            autoComplete="current-password"
+            className={`input-field pr-11 ${errors.currentPassword ? 'border-brick-300' : ''}`}
+            aria-invalid={errors.currentPassword ? 'true' : 'false'}
+            {...register('currentPassword', { required: 'Current password is required' })}
+          />
+          <button
+            type="button"
+            onClick={() => setShowCurrent(!showCurrent)}
+            aria-label={showCurrent ? 'Hide password' : 'Show password'}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-600 transition-colors"
+          >
+            {showCurrent ? <EyeOff className="w-4 h-4" strokeWidth={1.75} /> : <Eye className="w-4 h-4" strokeWidth={1.75} />}
+          </button>
+        </div>
+        {errors.currentPassword && (
+          <p className="mt-1 text-xs text-brick-500">{errors.currentPassword.message}</p>
+        )}
+      </div>
+
+      <div>
+        <label htmlFor="newPassword" className="block text-xs font-medium text-ink-600 mb-1">
+          New password
+        </label>
+        <div className="relative">
+          <input
+            id="newPassword"
+            type={showNew ? 'text' : 'password'}
+            autoComplete="new-password"
+            className={`input-field pr-11 ${errors.newPassword ? 'border-brick-300' : ''}`}
+            aria-invalid={errors.newPassword ? 'true' : 'false'}
+            {...register('newPassword', {
+              required: 'New password is required',
+              minLength: { value: 6, message: 'Password must be at least 6 characters' },
+            })}
+          />
+          <button
+            type="button"
+            onClick={() => setShowNew(!showNew)}
+            aria-label={showNew ? 'Hide password' : 'Show password'}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-600 transition-colors"
+          >
+            {showNew ? <EyeOff className="w-4 h-4" strokeWidth={1.75} /> : <Eye className="w-4 h-4" strokeWidth={1.75} />}
+          </button>
+        </div>
+        {errors.newPassword && <p className="mt-1 text-xs text-brick-500">{errors.newPassword.message}</p>}
+      </div>
+
+      <div className="flex gap-2 pt-1">
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="btn-primary flex-1 text-sm py-2.5 disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          {isSubmitting ? 'Updating…' : 'Update password'}
+        </button>
+        <button type="button" onClick={onDone} className="btn-ghost text-sm">
+          Cancel
+        </button>
+      </div>
+    </form>
+  )
+}
+
 function Profile() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
 
   const [pantryCount, setPantryCount] = useState(null)
   const [savedCount, setSavedCount] = useState(null)
+  const [showPasswordForm, setShowPasswordForm] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -107,10 +226,41 @@ function Profile() {
         />
       </motion.div>
 
-      <motion.button
+      <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.14, ease: [0.22, 1, 0.36, 1] }}
+        className="card mb-8"
+      >
+        <button
+          type="button"
+          onClick={() => setShowPasswordForm(!showPasswordForm)}
+          className="w-full flex items-center gap-3 text-left"
+        >
+          <span className="flex-shrink-0 w-9 h-9 rounded-full bg-paper-200 text-ink-600 flex items-center justify-center">
+            <KeyRound className="w-4 h-4" strokeWidth={1.75} />
+          </span>
+          <span className="flex-1 text-sm font-medium text-ink-700">Change password</span>
+        </button>
+        <AnimatePresence initial={false}>
+          {showPasswordForm && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+              className="overflow-hidden"
+            >
+              <ChangePasswordForm onDone={() => setShowPasswordForm(false)} />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
+
+      <motion.button
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
         onClick={handleLogout}
         className="btn-secondary w-full flex items-center justify-center gap-2"
       >
