@@ -5,6 +5,7 @@ import { motion } from 'framer-motion'
 import { Eye, EyeOff, ArrowRight } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { getErrorMessage } from '../services/api'
+import AuthShowcasePanel from '../components/AuthShowcasePanel'
 
 function Login() {
   const { login, sessionMessage, clearSessionMessage } = useAuth()
@@ -37,13 +38,14 @@ function Login() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4 py-16">
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-        className="w-full max-w-sm"
-      >
+    <div className="min-h-[calc(100vh-4rem)] grid lg:grid-cols-2">
+      <div className="flex items-center justify-center px-4 py-16">
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+          className="w-full max-w-sm"
+        >
         <div className="mb-8 text-center">
           <h1 className="font-display text-3xl font-semibold text-ink-800 mb-1.5">
             Welcome back
@@ -152,7 +154,10 @@ function Login() {
             Sign up
           </Link>
         </p>
-      </motion.div>
+        </motion.div>
+      </div>
+
+      <AuthShowcasePanel eyebrow="Fresh from Chef Brain" />
     </div>
   )
 }
