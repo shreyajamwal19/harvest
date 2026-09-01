@@ -61,7 +61,8 @@ public class PantryService {
      * without a second read.
      */
     @Transactional
-    public PantryItem addOrRestock(Long userId, String ingredientName, Double quantity, String unit) {
+    public PantryItem addOrRestock(Long userId, String ingredientName, Double quantity, String unit,
+                                    LocalDate expiryDate) {
         if (userId == null || ingredientName == null || ingredientName.isBlank()) {
             return null;
         }
@@ -81,6 +82,12 @@ public class PantryService {
             if (unit != null && !unit.isBlank()) {
                 item.setUnit(unit);
             }
+        }
+        // Only ever set when the caller explicitly provided one - restocking without a stated
+        // expiry leaves whatever expiry (or lack of one) the item already had untouched, rather
+        // than silently wiping out a previously-set date.
+        if (expiryDate != null) {
+            item.setExpiryDate(expiryDate);
         }
         PantryItem saved = pantryItemRepository.save(item);
         log.info("[pantry] add/restock userId={} ingredient='{}' quantity={} unit={}",
@@ -134,6 +141,29 @@ public class PantryService {
         item.setQuantity(quantity);
         PantryItem saved = pantryItemRepository.save(item);
         log.info("[pantry] updateQuantity userId={} itemId={} quantity={}", userId, itemId, quantity);
+        return saved;
+    }
+
+    /**
+     * There was previously no way to ever set expiryDate anywhere in the app - not via chat, not
+     * via the UI - despite it being a real column, exposed in every response, and already used
+     * by RecipeScoringEngine to prioritize "use it up soon" recipes. This closes that gap:
+     * explicitly settable (or clearable, via a null expiryDate) from the Pantry page. Same
+     * ownership-checked, 404-friendly shape as updateQuantity.
+     */
+    @Transactional
+    public PantryItem updateExpiryDate(Long userId, Long itemId, LocalDate expiryDate) {
+        if (userId == null || itemId == null) {
+            return null;
+        }
+        Optional<PantryItem> found = pantryItemRepository.findByIdAndUserId(itemId, userId);
+        if (found.isEmpty()) {
+            return null;
+        }
+        PantryItem item = found.get();
+        item.setExpiryDate(expiryDate);
+        PantryItem saved = pantryItemRepository.save(item);
+        log.info("[pantry] updateExpiryDate userId={} itemId={} expiryDate={}", userId, itemId, expiryDate);
         return saved;
     }
 

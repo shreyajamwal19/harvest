@@ -74,8 +74,8 @@ export function getPantryItems() {
   return api.get('/pantry')
 }
 
-export function addPantryItem({ ingredientName, quantity, unit }) {
-  return api.post('/pantry', { ingredientName, quantity, unit })
+export function addPantryItem({ ingredientName, quantity, unit, expiryDate }) {
+  return api.post('/pantry', { ingredientName, quantity, unit, expiryDate })
 }
 
 export function removePantryItem(itemId) {
@@ -84,6 +84,11 @@ export function removePantryItem(itemId) {
 
 export function updatePantryItemQuantity(itemId, quantity) {
   return api.patch(`/pantry/${itemId}`, { quantity })
+}
+
+/** expiryDate is a 'yyyy-MM-dd' string, or null to stop tracking expiry for this item. */
+export function updatePantryItemExpiry(itemId, expiryDate) {
+  return api.patch(`/pantry/${itemId}/expiry`, { expiryDate })
 }
 
 export function clearPantry() {

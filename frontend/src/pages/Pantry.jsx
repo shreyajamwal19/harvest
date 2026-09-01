@@ -1,12 +1,13 @@
 /* eslint-disable react/prop-types -- this project doesn't use PropTypes, see AuthContext.jsx */
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, X, AlertCircle, Clock, Trash2, ShoppingBasket, Minus } from 'lucide-react'
+import { Plus, X, AlertCircle, Clock, Trash2, ShoppingBasket, Minus, Calendar } from 'lucide-react'
 import {
   getPantryItems,
   addPantryItem,
   removePantryItem,
   updatePantryItemQuantity,
+  updatePantryItemExpiry,
   clearPantry,
   getErrorMessage,
 } from '../services/api'
@@ -52,7 +53,53 @@ function QuantityStepper({ item, onChange, disabled }) {
   )
 }
 
-function PantryItemRow({ item, onRemove, onQuantityChange, removing }) {
+function ExpiryControl({ item, onChange, disabled }) {
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState(item.expiryDate || '')
+
+  useEffect(() => {
+    setValue(item.expiryDate || '')
+  }, [item.expiryDate])
+
+  const commit = () => {
+    setEditing(false)
+    if (value !== (item.expiryDate || '')) {
+      onChange(item.id, value || null)
+    }
+  }
+
+  if (editing) {
+    return (
+      <input
+        type="date"
+        autoFocus
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+        disabled={disabled}
+        className="text-xs border border-ink-700/15 rounded-sheet px-1.5 py-1 text-ink-600 bg-paper-50 disabled:opacity-40"
+      />
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => setEditing(true)}
+      disabled={disabled}
+      aria-label={item.expiryDate ? `Change expiry date for ${item.ingredientName}` : `Set expiry date for ${item.ingredientName}`}
+      className="flex-shrink-0 inline-flex items-center gap-1 text-xs text-ink-400 hover:text-ink-600 transition-colors disabled:opacity-40"
+    >
+      <Calendar className="w-3.5 h-3.5" strokeWidth={1.75} />
+      {item.expiryDate
+        ? new Date(`${item.expiryDate}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+        : 'Set expiry'}
+    </button>
+  )
+}
+
+function PantryItemRow({ item, onRemove, onQuantityChange, onExpiryChange, removing }) {
   return (
     <motion.li
       layout
@@ -72,6 +119,7 @@ function PantryItemRow({ item, onRemove, onQuantityChange, removing }) {
             Expiring soon
           </span>
         )}
+        <ExpiryControl item={item} onChange={onExpiryChange} disabled={removing} />
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
         {item.quantity != null ? (
@@ -101,6 +149,7 @@ function Pantry() {
   const [name, setName] = useState('')
   const [quantity, setQuantity] = useState('')
   const [unit, setUnit] = useState('')
+  const [expiryDate, setExpiryDate] = useState('')
   const [adding, setAdding] = useState(false)
   const [addError, setAddError] = useState('')
 
@@ -144,6 +193,7 @@ function Pantry() {
         ingredientName: trimmed,
         quantity: quantity.trim() ? Number(quantity) : undefined,
         unit: unit.trim() || undefined,
+        expiryDate: expiryDate || undefined,
       })
       setItems((prev) => {
         const withoutExisting = prev.filter((i) => i.id !== response.data.id)
@@ -152,6 +202,7 @@ function Pantry() {
       setName('')
       setQuantity('')
       setUnit('')
+      setExpiryDate('')
     } catch (err) {
       setAddError(getErrorMessage(err, "Couldn't add that item. Please try again."))
     } finally {
@@ -188,6 +239,17 @@ function Pantry() {
     } catch (err) {
       setItems(previous)
       setError(getErrorMessage(err, "Couldn't update that quantity. Please try again."))
+    }
+  }
+
+  const handleExpiryChange = async (itemId, newExpiryDate) => {
+    try {
+      const response = await updatePantryItemExpiry(itemId, newExpiryDate)
+      if (response.data) {
+        setItems((prev) => prev.map((i) => (i.id === itemId ? response.data : i)))
+      }
+    } catch (err) {
+      setError(getErrorMessage(err, "Couldn't update the expiry date. Please try again."))
     }
   }
 
@@ -294,6 +356,15 @@ function Pantry() {
               className="input-field w-24"
               disabled={adding}
             />
+            <input
+              type="date"
+              value={expiryDate}
+              onChange={(e) => setExpiryDate(e.target.value)}
+              aria-label="Expiry date (optional)"
+              title="Expiry date (optional)"
+              className="input-field w-[8.5rem] text-ink-500"
+              disabled={adding}
+            />
             <button
               type="submit"
               disabled={adding || !name.trim()}
@@ -350,6 +421,7 @@ function Pantry() {
                         item={item}
                         onRemove={handleRemove}
                         onQuantityChange={handleQuantityChange}
+                        onExpiryChange={handleExpiryChange}
                         removing={removingId === item.id}
                       />
                     ))}

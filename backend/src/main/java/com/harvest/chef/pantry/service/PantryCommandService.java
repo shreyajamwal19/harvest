@@ -38,7 +38,11 @@ public class PantryCommandService {
         if (command.ingredient() == null || command.ingredient().isBlank()) {
             return update("What did you pick up? Try \"I bought eggs\" or \"add tomatoes\".");
         }
-        pantryService.addOrRestock(userId, command.ingredient(), command.quantity(), command.unit());
+        // Chat-based expiry parsing deliberately not attempted here - extracting a real date
+        // from free text ("expires next Tuesday", "good until the 15th") risks getting it wrong
+        // in a way that would silently mislead the expiry-aware recipe scoring. Expiry can be
+        // set explicitly on the Pantry page instead.
+        pantryService.addOrRestock(userId, command.ingredient(), command.quantity(), command.unit(), null);
         String amount = command.quantity() != null
                 ? " (" + formatQuantity(command.quantity()) + (command.unit() != null ? " " + command.unit() : "") + ")"
                 : "";

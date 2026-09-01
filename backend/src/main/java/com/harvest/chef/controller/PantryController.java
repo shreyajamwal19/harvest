@@ -1,5 +1,6 @@
 package com.harvest.chef.controller;
 
+import com.harvest.chef.pantry.dto.PantryExpiryUpdateRequest;
 import com.harvest.chef.pantry.dto.PantryItemRequest;
 import com.harvest.chef.pantry.dto.PantryItemResponse;
 import com.harvest.chef.pantry.dto.PantryQuantityUpdateRequest;
@@ -46,7 +47,8 @@ public class PantryController {
                                                     @Valid @RequestBody PantryItemRequest request) {
         Long userId = resolveUserId(userDetails);
         PantryItem saved = pantryService.addOrRestock(
-                userId, request.getIngredientName(), request.getQuantity(), request.getUnit());
+                userId, request.getIngredientName(), request.getQuantity(), request.getUnit(),
+                request.getExpiryDate());
         return ResponseEntity.status(HttpStatus.CREATED).body(PantryItemResponse.from(saved));
     }
 
@@ -81,6 +83,24 @@ public class PantryController {
         }
 
         PantryItem updated = pantryService.updateQuantity(userId, itemId, request.getQuantity());
+        if (updated == null) {
+            throw new ResourceNotFoundException("Pantry item not found");
+        }
+        return ResponseEntity.ok(PantryItemResponse.from(updated));
+    }
+
+    /**
+     * Sets or clears (null expiryDate) a single item's expiry - the only place in the whole app
+     * this was ever settable before now (not even via chat). Separate endpoint from the quantity
+     * PATCH above rather than folded into it: quantity<=0 there means "remove the item", a
+     * completely different intent than "I don't want to track this item's expiry anymore".
+     */
+    @PatchMapping("/{itemId}/expiry")
+    public ResponseEntity<PantryItemResponse> updateExpiry(@AuthenticationPrincipal UserDetails userDetails,
+                                                             @PathVariable Long itemId,
+                                                             @RequestBody PantryExpiryUpdateRequest request) {
+        Long userId = resolveUserId(userDetails);
+        PantryItem updated = pantryService.updateExpiryDate(userId, itemId, request.getExpiryDate());
         if (updated == null) {
             throw new ResourceNotFoundException("Pantry item not found");
         }

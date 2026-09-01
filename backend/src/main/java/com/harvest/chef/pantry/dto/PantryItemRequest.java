@@ -6,6 +6,8 @@ import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.time.LocalDate;
+
 @Getter
 @Setter
 public class PantryItemRequest {
@@ -20,4 +22,7 @@ public class PantryItemRequest {
 
     @Size(max = 30, message = "Unit must be 30 characters or fewer")
     private String unit;
+
+    /** Optional. Never inferred if omitted - only ever what the person explicitly set. */
+    private LocalDate expiryDate;
 }
