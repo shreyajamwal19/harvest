@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Quote, Users, ShoppingBag, Check, Bookmark, Loader2, ChefHat, Sparkle } from 'lucide-react'
+import { Quote, Users, ShoppingBag, Check, Bookmark, Loader2, ChefHat, Sparkle, Share2 } from 'lucide-react'
 
 const SOURCE_LABELS = {
   local: 'Harvest recipe',
@@ -32,6 +32,7 @@ function RecipeCard({ recipe, onToggleSave, saved = false, savePending = false }
   const [checked, setChecked] = useState(() => new Set())
   const [burst, setBurst] = useState(false)
   const [imageFailed, setImageFailed] = useState(false)
+  const [shareState, setShareState] = useState('idle') // 'idle' | 'copied'
   const wasSavedRef = useRef(saved)
   const navigate = useNavigate()
 
@@ -60,6 +61,41 @@ function RecipeCard({ recipe, onToggleSave, saved = false, savePending = false }
     navigate('/cook', { state: { recipe } })
   }
 
+  // Native share sheet where available (mobile browsers, some desktop); falls back to
+  // copying a plain-text version to the clipboard everywhere else. No backend involved -
+  // this is purely "hand the person their own recipe data in a portable form".
+  const shareRecipe = async () => {
+    const lines = [
+      recipe.title,
+      recipe.description || '',
+      '',
+      'Ingredients:',
+      ...(recipe.ingredients || []).map((i) => `- ${i}`),
+      '',
+      'Steps:',
+      ...(recipe.steps || []).map((s, i) => `${i + 1}. ${s}`),
+    ]
+    const text = lines.join('\n')
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: recipe.title, text })
+      } catch {
+        // Person dismissed the native share sheet - not an error worth surfacing.
+      }
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(text)
+      setShareState('copied')
+      setTimeout(() => setShareState('idle'), 1800)
+    } catch {
+      // Clipboard write can fail (permissions, insecure context) - fail quietly rather than
+      // showing an error banner for what's a nice-to-have convenience action.
+    }
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -83,48 +119,62 @@ function RecipeCard({ recipe, onToggleSave, saved = false, savePending = false }
         <div className="h-1 bg-gradient-to-r from-brick-500 via-brick-400 to-gold-300" />
       )}
 
-      {onToggleSave && (
-        <div className="absolute top-4 right-4 sm:right-6 z-10">
-          <AnimatePresence>
-            {burst && (
-              <motion.div className="absolute inset-0 pointer-events-none">
-                {BURST_PARTICLES.map((p, i) => (
-                  <motion.span
-                    key={i}
-                    initial={{ x: 0, y: 0, opacity: 1, scale: 0.4 }}
-                    animate={{ x: p.x, y: p.y, opacity: 0, scale: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.5, delay: p.delay, ease: 'easeOut' }}
-                    className={`absolute top-1/2 left-1/2 ${p.tone}`}
-                  >
-                    <Sparkle className="w-3 h-3 -translate-x-1/2 -translate-y-1/2" fill="currentColor" strokeWidth={0} />
-                  </motion.span>
-                ))}
-              </motion.div>
-            )}
-          </AnimatePresence>
-          <motion.button
-            type="button"
-            onClick={onToggleSave}
-            disabled={savePending}
-            aria-pressed={saved}
-            aria-label={saved ? 'Remove from saved recipes' : 'Save this recipe'}
-            animate={burst ? { scale: [1, 1.28, 1] } : { scale: 1 }}
-            transition={{ duration: 0.4, ease: [0.34, 1.56, 0.64, 1] }}
-            className={`flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center border transition-colors duration-150 disabled:opacity-50 ${
-              saved
-                ? 'bg-brick-500 border-brick-500 text-paper-50'
-                : 'bg-paper-50/90 border-ink-700/15 text-ink-500 hover:text-brick-500 hover:border-brick-300'
-            }`}
-          >
-            {savePending ? (
-              <Loader2 className="w-4 h-4 animate-spin" strokeWidth={2} />
-            ) : (
-              <Bookmark className="w-4 h-4" strokeWidth={2} fill={saved ? 'currentColor' : 'none'} />
-            )}
-          </motion.button>
-        </div>
-      )}
+      <div className="absolute top-4 right-4 sm:right-6 z-10 flex items-center gap-2">
+        {onToggleSave && (
+          <>
+            <AnimatePresence>
+              {burst && (
+                <motion.div className="absolute inset-0 pointer-events-none">
+                  {BURST_PARTICLES.map((p, i) => (
+                    <motion.span
+                      key={i}
+                      initial={{ x: 0, y: 0, opacity: 1, scale: 0.4 }}
+                      animate={{ x: p.x, y: p.y, opacity: 0, scale: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.5, delay: p.delay, ease: 'easeOut' }}
+                      className={`absolute top-1/2 left-1/2 ${p.tone}`}
+                    >
+                      <Sparkle className="w-3 h-3 -translate-x-1/2 -translate-y-1/2" fill="currentColor" strokeWidth={0} />
+                    </motion.span>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+            <motion.button
+              type="button"
+              onClick={onToggleSave}
+              disabled={savePending}
+              aria-pressed={saved}
+              aria-label={saved ? 'Remove from saved recipes' : 'Save this recipe'}
+              animate={burst ? { scale: [1, 1.28, 1] } : { scale: 1 }}
+              transition={{ duration: 0.4, ease: [0.34, 1.56, 0.64, 1] }}
+              className={`flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center border transition-colors duration-150 disabled:opacity-50 ${
+                saved
+                  ? 'bg-brick-500 border-brick-500 text-paper-50'
+                  : 'bg-paper-50/90 border-ink-700/15 text-ink-500 hover:text-brick-500 hover:border-brick-300'
+              }`}
+            >
+              {savePending ? (
+                <Loader2 className="w-4 h-4 animate-spin" strokeWidth={2} />
+              ) : (
+                <Bookmark className="w-4 h-4" strokeWidth={2} fill={saved ? 'currentColor' : 'none'} />
+              )}
+            </motion.button>
+          </>
+        )}
+        <button
+          type="button"
+          onClick={shareRecipe}
+          aria-label={shareState === 'copied' ? 'Recipe copied to clipboard' : 'Share this recipe'}
+          className="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center border bg-paper-50/90 border-ink-700/15 text-ink-500 hover:text-brick-500 hover:border-brick-300 transition-colors duration-150"
+        >
+          {shareState === 'copied' ? (
+            <Check className="w-4 h-4" strokeWidth={2} />
+          ) : (
+            <Share2 className="w-4 h-4" strokeWidth={1.75} />
+          )}
+        </button>
+      </div>
 
       <div className="px-5 sm:px-7 pt-6 pb-5">
         <div className="flex items-start justify-between gap-3 flex-wrap pr-10">
