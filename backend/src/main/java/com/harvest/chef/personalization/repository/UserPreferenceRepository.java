@@ -16,6 +16,12 @@ public interface UserPreferenceRepository extends JpaRepository<UserPreference, 
 
     List<UserPreference> findByUserIdOrderByConfidenceDesc(Long userId);
 
+    /** Precise, ownership-checked single-row delete for the Preferences page's per-item delete
+     *  button - distinct from deleteByUserIdAndValueMatching's deliberately fuzzy fragment match,
+     *  which exists for chat's "forget X" phrasing tolerance, not for deleting one exact row a
+     *  person is looking straight at in the UI. */
+    long deleteByIdAndUserId(Long id, Long userId);
+
     Optional<UserPreference> findByUserIdAndCategoryAndValue(Long userId, PreferenceCategory category, String value);
 
     @Modifying

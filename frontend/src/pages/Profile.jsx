@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LogOut, ShoppingBasket, Bookmark, ArrowUpRight, KeyRound, Eye, EyeOff, Check } from 'lucide-react'
+import { LogOut, ShoppingBasket, Bookmark, ArrowUpRight, KeyRound, Eye, EyeOff, Check, Sparkles } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { getPantryItems, getSavedRecipes, changePassword, getErrorMessage } from '../services/api'
 
@@ -255,6 +255,21 @@ function Profile() {
             </motion.div>
           )}
         </AnimatePresence>
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.17, ease: [0.22, 1, 0.36, 1] }}
+        className="card mb-8"
+      >
+        <Link to="/settings" className="flex items-center gap-3">
+          <span className="flex-shrink-0 w-9 h-9 rounded-full bg-paper-200 text-ink-600 flex items-center justify-center">
+            <Sparkles className="w-4 h-4" strokeWidth={1.75} />
+          </span>
+          <span className="flex-1 text-sm font-medium text-ink-700">What Harvest knows about you</span>
+          <ArrowUpRight className="w-4 h-4 text-ink-400" strokeWidth={1.75} />
+        </Link>
       </motion.div>
 
       <motion.button

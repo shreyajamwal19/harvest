@@ -10,6 +10,7 @@ import Pantry from './pages/Pantry'
 import MealPlan from './pages/MealPlan'
 import SavedRecipes from './pages/SavedRecipes'
 import CookMode from './pages/CookMode'
+import Settings from './pages/Settings'
 import ErrorPage from './pages/ErrorPage'
 
 function App() {
@@ -26,6 +27,7 @@ function App() {
           <Route path="/meal-plan" element={<MealPlan />} />
           <Route path="/saved" element={<SavedRecipes />} />
           <Route path="/cook" element={<CookMode />} />
+          <Route path="/settings" element={<Settings />} />
         </Route>
         <Route path="*" element={<ErrorPage />} />
       </Route>

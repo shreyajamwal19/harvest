@@ -175,6 +175,30 @@ public class UserProfileService {
                 userId, category, normalized, round(previous), round(blended), preference.getSource());
     }
 
+    /** Full entity list (with IDs), for the Preferences page - mirrors PantryService.listEntities. */
+    public List<UserPreference> listEntities(Long userId) {
+        if (userId == null) {
+            return List.of();
+        }
+        try {
+            return preferenceRepository.findByUserIdOrderByConfidenceDesc(userId);
+        } catch (Exception e) {
+            log.warn("[personalization] failed to list preferences for userId={}: {}", userId, e.getMessage());
+            return List.of();
+        }
+    }
+
+    /** Ownership-checked delete of one exact preference row. Returns false if not found/owned. */
+    @Transactional
+    public boolean deleteById(Long userId, Long preferenceId) {
+        if (userId == null || preferenceId == null) {
+            return false;
+        }
+        long removed = preferenceRepository.deleteByIdAndUserId(preferenceId, userId);
+        log.info("[personalization] deleteById userId={} preferenceId={} removed={}", userId, preferenceId, removed);
+        return removed > 0;
+    }
+
     @Transactional
     public int forget(Long userId, String valueFragment) {
         if (userId == null || valueFragment == null || valueFragment.isBlank()) {

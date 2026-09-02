@@ -135,4 +135,22 @@ export function changePassword({ currentPassword, newPassword }) {
   return api.put('/user/password', { currentPassword, newPassword })
 }
 
+/**
+ * Learned preferences (favorite cuisines, dietary restrictions, etc.) - previously viewable/
+ * manageable only via chat commands ("show my preferences", "forget X"). Same underlying table,
+ * so a change made here or in chat shows up in both.
+ */
+export function getPreferences() {
+  return api.get('/preferences')
+}
+
+export function deletePreference(preferenceId) {
+  return api.delete(`/preferences/${preferenceId}`)
+}
+
+/** Same as the "reset my profile" chat command - clears every learned preference. */
+export function resetPreferences() {
+  return api.delete('/preferences')
+}
+
 export default api
