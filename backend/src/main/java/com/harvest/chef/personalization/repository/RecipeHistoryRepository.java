@@ -14,6 +14,12 @@ public interface RecipeHistoryRepository extends JpaRepository<RecipeHistoryEntr
 
     List<RecipeHistoryEntry> findTop50ByUserIdOrderByCreatedAtDesc(Long userId);
 
+    /** COOKED only, most-recent-first - the Cooking History page's data source. Everything else
+     *  in the table (VIEWED/REPEATED especially) is logged on every single chat turn and would
+     *  drown out the handful of times someone actually finished cooking something. */
+    List<RecipeHistoryEntry> findTop50ByUserIdAndEventTypeOrderByCreatedAtDesc(
+            Long userId, com.harvest.chef.personalization.entity.HistoryEventType eventType);
+
     long countByUserIdAndRecipeTitleAndEventType(Long userId, String recipeTitle,
                                                   com.harvest.chef.personalization.entity.HistoryEventType eventType);
 

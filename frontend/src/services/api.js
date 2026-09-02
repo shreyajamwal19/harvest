@@ -116,6 +116,11 @@ export function markRecipeCooked(title) {
   return api.post('/recipes/cooked', { title })
 }
 
+/** Reverse-chronological list of everything actually cooked (not just saved) - the Cooking History page. */
+export function getCookingHistory() {
+  return api.get('/recipes/cooked')
+}
+
 /** Public, unauthenticated - one real dish (with photo). Optional `query` picks the cuisine/dish. */
 export function getShowcaseRecipe(query) {
   return api.get('/public/showcase', { params: query ? { query } : {} })
