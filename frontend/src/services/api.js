@@ -140,6 +140,11 @@ export function changePassword({ currentPassword, newPassword }) {
   return api.put('/user/password', { currentPassword, newPassword })
 }
 
+/** Irreversible - requires currentPassword confirmation, verified server-side. */
+export function deleteAccount(currentPassword) {
+  return api.delete('/user', { data: { currentPassword } })
+}
+
 /**
  * Learned preferences (favorite cuisines, dietary restrictions, etc.) - previously viewable/
  * manageable only via chat commands ("show my preferences", "forget X"). Same underlying table,

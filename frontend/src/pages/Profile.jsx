@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form'
 import { motion, AnimatePresence } from 'framer-motion'
 import { LogOut, ShoppingBasket, Bookmark, ArrowUpRight, KeyRound, Eye, EyeOff, Check, Sparkles, ChefHat } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import { getPantryItems, getSavedRecipes, changePassword, getErrorMessage } from '../services/api'
+import { getPantryItems, getSavedRecipes, changePassword, deleteAccount, getErrorMessage } from '../services/api'
 
 function initials(name) {
   if (!name) return '?'
@@ -161,6 +161,81 @@ function ChangePasswordForm({ onDone }) {
   )
 }
 
+function DeleteAccountForm({ onCancel }) {
+  const { logout } = useAuth()
+  const navigate = useNavigate()
+  const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [error, setError] = useState('')
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  const handleDelete = async (e) => {
+    e.preventDefault()
+    if (!password) {
+      setError('Enter your current password to confirm.')
+      return
+    }
+    if (!window.confirm('Delete your account permanently? This removes your pantry, saved recipes, cooking history, and everything Harvest has learned about you. This cannot be undone.')) {
+      return
+    }
+    setError('')
+    setIsDeleting(true)
+    try {
+      await deleteAccount(password)
+      await logout()
+      navigate('/', { replace: true })
+    } catch (err) {
+      setError(getErrorMessage(err, 'Could not delete your account'))
+      setIsDeleting(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleDelete} className="space-y-3 pt-1">
+      {error && (
+        <div className="px-3.5 py-2.5 bg-brick-50 border border-brick-200 rounded-sheet text-brick-600 text-sm">
+          {error}
+        </div>
+      )}
+      <div>
+        <label htmlFor="deleteConfirmPassword" className="block text-xs font-medium text-ink-600 mb-1">
+          Confirm your password to delete your account
+        </label>
+        <div className="relative">
+          <input
+            id="deleteConfirmPassword"
+            type={showPassword ? 'text' : 'password'}
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="input-field pr-11"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            aria-label={showPassword ? 'Hide password' : 'Show password'}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-600 transition-colors"
+          >
+            {showPassword ? <EyeOff className="w-4 h-4" strokeWidth={1.75} /> : <Eye className="w-4 h-4" strokeWidth={1.75} />}
+          </button>
+        </div>
+      </div>
+      <div className="flex gap-2 pt-1">
+        <button
+          type="submit"
+          disabled={isDeleting}
+          className="flex-1 text-sm py-2.5 rounded-xl font-medium bg-brick-500 text-paper-50 hover:bg-brick-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          {isDeleting ? 'Deleting…' : 'Delete my account'}
+        </button>
+        <button type="button" onClick={onCancel} className="btn-ghost text-sm">
+          Cancel
+        </button>
+      </div>
+    </form>
+  )
+}
+
 function Profile() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
@@ -168,6 +243,7 @@ function Profile() {
   const [pantryCount, setPantryCount] = useState(null)
   const [savedCount, setSavedCount] = useState(null)
   const [showPasswordForm, setShowPasswordForm] = useState(false)
+  const [showDeleteForm, setShowDeleteForm] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -297,6 +373,25 @@ function Profile() {
         <LogOut className="w-4 h-4" strokeWidth={1.75} />
         Log out
       </motion.button>
+
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.32, ease: [0.22, 1, 0.36, 1] }}
+        className="mt-10 pt-6 border-t border-ink-700/10"
+      >
+        {!showDeleteForm ? (
+          <button
+            type="button"
+            onClick={() => setShowDeleteForm(true)}
+            className="text-xs font-medium text-ink-400 hover:text-brick-500 transition-colors"
+          >
+            Delete account
+          </button>
+        ) : (
+          <DeleteAccountForm onCancel={() => setShowDeleteForm(false)} />
+        )}
+      </motion.div>
     </div>
   )
 }

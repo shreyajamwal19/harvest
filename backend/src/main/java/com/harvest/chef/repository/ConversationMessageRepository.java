@@ -3,6 +3,7 @@ package com.harvest.chef.repository;
 import com.harvest.chef.entity.ConversationMessage;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -37,4 +38,13 @@ public interface ConversationMessageRepository extends JpaRepository<Conversatio
             @Param("userId") Long userId,
             @Param("excludingSessionId") Long excludingSessionId,
             Pageable pageable);
+
+    /** Messages don't carry userId directly (only sessionId) - joins through
+     *  ConversationSession to reach every message across every one of a user's sessions.
+     *  Must run before ConversationSessionRepository.deleteAllByUserId, or the sessions this
+     *  join depends on would already be gone. */
+    @Modifying
+    @Query("DELETE FROM ConversationMessage m WHERE m.sessionId IN "
+            + "(SELECT s.id FROM ConversationSession s WHERE s.userId = :userId)")
+    int deleteAllForUser(@Param("userId") Long userId);
 }

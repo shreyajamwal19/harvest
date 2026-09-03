@@ -2,6 +2,9 @@ package com.harvest.chef.personalization.repository;
 
 import com.harvest.chef.personalization.entity.SavedRecipe;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -18,4 +21,8 @@ public interface SavedRecipeRepository extends JpaRepository<SavedRecipe, Long> 
     Optional<SavedRecipe> findByIdAndUserId(Long id, Long userId);
 
     boolean existsByUserIdAndRecipeTitle(Long userId, String recipeTitle);
+
+    @Modifying
+    @Query("DELETE FROM SavedRecipe s WHERE s.userId = :userId")
+    int deleteAllByUserId(@Param("userId") Long userId);
 }
