@@ -1,6 +1,16 @@
 package com.harvest.controller;
 
+import com.harvest.chef.pantry.dto.PantryItemResponse;
+import com.harvest.chef.pantry.service.PantryService;
+import com.harvest.chef.personalization.entity.HistoryEventType;
+import com.harvest.chef.personalization.repository.RecipeHistoryRepository;
+import com.harvest.chef.personalization.dto.RecipeHistoryEntryResponse;
+import com.harvest.chef.personalization.dto.SavedRecipeResponse;
+import com.harvest.chef.personalization.dto.UserPreferenceResponse;
+import com.harvest.chef.personalization.service.SavedRecipeService;
+import com.harvest.chef.personalization.service.UserProfileService;
 import com.harvest.dto.ChangePasswordRequest;
+import com.harvest.dto.DataExportResponse;
 import com.harvest.dto.DeleteAccountRequest;
 import com.harvest.dto.SessionResponse;
 import com.harvest.dto.UserDto;
@@ -38,6 +48,10 @@ public class UserController {
     private final AuthService authService;
     private final AccountDeletionService accountDeletionService;
     private final CookieUtil cookieUtil;
+    private final PantryService pantryService;
+    private final SavedRecipeService savedRecipeService;
+    private final RecipeHistoryRepository recipeHistoryRepository;
+    private final UserProfileService userProfileService;
 
     @GetMapping("/me")
     public ResponseEntity<SessionResponse> getCurrentUser(@AuthenticationPrincipal UserDetails userDetails,
@@ -64,6 +78,42 @@ public class UserController {
         authService.changePassword(user.getId(), request);
 
         return ResponseEntity.ok(Map.of("message", "Password updated successfully"));
+    }
+
+    /**
+     * Access/portability counterpart to DELETE below - everything Harvest stores about this
+     * user, bundled as one JSON download. Reuses the exact same read paths every other page
+     * already uses (SavedRecipeService.list, PantryService.listEntities, UserProfileService.
+     * listEntities, the same COOKED-only history query the History page uses) rather than a
+     * separate export-specific query path that could drift out of sync with what's actually
+     * stored.
+     */
+    @GetMapping("/export")
+    public ResponseEntity<DataExportResponse> exportData(@AuthenticationPrincipal UserDetails userDetails) {
+        User user = userRepository.findByEmail(userDetails.getUsername())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        DataExportResponse export = DataExportResponse.builder()
+                .userId(user.getId())
+                .name(user.getName())
+                .email(user.getEmail())
+                .accountCreatedAt(user.getCreatedAt())
+                .exportedAt(Instant.now())
+                .pantryItems(pantryService.listEntities(user.getId()).stream()
+                        .map(PantryItemResponse::from)
+                        .toList())
+                .savedRecipes(savedRecipeService.list(user.getId()))
+                .cookingHistory(recipeHistoryRepository
+                        .findTop50ByUserIdAndEventTypeOrderByCreatedAtDesc(user.getId(), HistoryEventType.COOKED)
+                        .stream()
+                        .map(RecipeHistoryEntryResponse::from)
+                        .toList())
+                .preferences(userProfileService.listEntities(user.getId()).stream()
+                        .map(UserPreferenceResponse::from)
+                        .toList())
+                .build();
+
+        return ResponseEntity.ok(export);
     }
 
     /**

@@ -3,9 +3,9 @@ import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LogOut, ShoppingBasket, Bookmark, ArrowUpRight, KeyRound, Eye, EyeOff, Check, Sparkles, ChefHat } from 'lucide-react'
+import { LogOut, ShoppingBasket, Bookmark, ArrowUpRight, KeyRound, Eye, EyeOff, Check, Sparkles, ChefHat, Download } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import { getPantryItems, getSavedRecipes, changePassword, deleteAccount, getErrorMessage } from '../services/api'
+import { getPantryItems, getSavedRecipes, changePassword, deleteAccount, exportUserData, getErrorMessage } from '../services/api'
 
 function initials(name) {
   if (!name) return '?'
@@ -244,6 +244,8 @@ function Profile() {
   const [savedCount, setSavedCount] = useState(null)
   const [showPasswordForm, setShowPasswordForm] = useState(false)
   const [showDeleteForm, setShowDeleteForm] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -261,6 +263,27 @@ function Profile() {
   const handleLogout = async () => {
     await logout()
     navigate('/login')
+  }
+
+  const handleExportData = async () => {
+    setExportError('')
+    setExporting(true)
+    try {
+      const response = await exportUserData()
+      const blob = new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'harvest-data-export.json'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setExportError(getErrorMessage(err, "Couldn't export your data. Please try again."))
+    } finally {
+      setExporting(false)
+    }
   }
 
   return (
@@ -361,6 +384,23 @@ function Profile() {
           <span className="flex-1 text-sm font-medium text-ink-700">Cooking history</span>
           <ArrowUpRight className="w-4 h-4 text-ink-400" strokeWidth={1.75} />
         </Link>
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.23, ease: [0.22, 1, 0.36, 1] }}
+        className="card mb-8"
+      >
+        <button type="button" onClick={handleExportData} disabled={exporting} className="w-full flex items-center gap-3 text-left disabled:opacity-60">
+          <span className="flex-shrink-0 w-9 h-9 rounded-full bg-paper-200 text-ink-600 flex items-center justify-center">
+            <Download className="w-4 h-4" strokeWidth={1.75} />
+          </span>
+          <span className="flex-1 text-sm font-medium text-ink-700">
+            {exporting ? 'Preparing your data…' : 'Export my data'}
+          </span>
+        </button>
+        {exportError && <p className="mt-2 text-xs text-brick-500">{exportError}</p>}
       </motion.div>
 
       <motion.button

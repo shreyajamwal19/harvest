@@ -145,6 +145,11 @@ export function deleteAccount(currentPassword) {
   return api.delete('/user', { data: { currentPassword } })
 }
 
+/** GDPR-style data export - everything Harvest stores about this account, bundled as JSON. */
+export function exportUserData() {
+  return api.get('/user/export')
+}
+
 /**
  * Learned preferences (favorite cuisines, dietary restrictions, etc.) - previously viewable/
  * manageable only via chat commands ("show my preferences", "forget X"). Same underlying table,
