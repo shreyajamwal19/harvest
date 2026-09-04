@@ -115,7 +115,6 @@ function Login() {
                 aria-describedby={errors.password ? 'password-error' : undefined}
                 {...register('password', {
                   required: 'Password is required',
-                  minLength: { value: 6, message: 'Password must be at least 6 characters' },
                 })}
               />
               <button
